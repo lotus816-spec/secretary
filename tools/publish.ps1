@@ -44,10 +44,19 @@ Get-ChildItem -LiteralPath $src -Force | Where-Object { $_.Name -ne '.git' } | F
   Copy-Item -LiteralPath $_.FullName -Destination $stage -Recurse -Force
 }
 
-# حماية: عدم رفع ملفات المفاتيح الخاصة أبداً (secure API keys)
-$secretCfg = Join-Path $stage 'supabase'
-$secretCfg = Join-Path $secretCfg 'config.js'
-if (Test-Path -LiteralPath $secretCfg) { Remove-Item -LiteralPath $secretCfg -Force; Write-Host '🔒 تم استثناء supabase/config.js من النشر (مفاتيح خاصة)' }
+# حماية: ملف config.js يُنشر الآن (يحتوي مفتاح النشر العام فقط — مصمم ليكون علنياً ومحمي بعزل RLS)
+# لكن كخط دفاع أخير: تأكد أنه لا يحوي المفتاح السرّي أبداً قبل النشر
+$pubCfg = Join-Path $stage 'supabase'
+$pubCfg = Join-Path $pubCfg 'config.js'
+if (Test-Path -LiteralPath $pubCfg) {
+  $cfgText = Get-Content -LiteralPath $pubCfg -Raw
+  if ($cfgText -match 'sb_secret_') {
+    Remove-Item -LiteralPath $pubCfg -Force
+    Write-Host '⛔ config.js حوى مفتاحاً سرّياً — أُزيل من النشر إلزامياً. راجع الملف محلياً.'
+  } else {
+    Write-Host '✔ supabase/config.js سيُنشر (مفتاح عام فقط — لا سرّي)'
+  }
+}
 
 # رفع إصدار الأصول (?v=N) لكسر كاش المتصفح بعد كل نشر
 $verFile = Join-Path $src 'version.txt'
