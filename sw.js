@@ -1,7 +1,7 @@
 /* سكرتاري | Secretary — Service Worker
    Offline-first: يخدم ملفات التطبيق من الكاش عند انقطاع الاتصال.
    ملفات المستخدم (localStorage) لا تُمسّ أبداً. */
-const VERSION = 'secretary-v3';
+const VERSION = 'secretary-v4';
 const CORE = [
   './',
   './index.html',
@@ -47,39 +47,23 @@ self.addEventListener('fetch', function (e) {
   try { url = new URL(req.url); } catch (err) { return; }
 
   if (url.origin === self.location.origin) {
-    // التنقّل: الشبكة أولاً (أحدث نسخة دائماً) مع الرجوع للكاش عند انقطاع الاتصال
-    if (req.mode === 'navigate') {
-      e.respondWith(
-        fetch(req).then(function (res) {
-          if (res && res.ok) {
-            var copy = res.clone();
-            caches.open(VERSION).then(function (c) { c.put('./index.html', copy); });
-          }
-          return res;
-        }).catch(function () {
-          return caches.match('./index.html').then(function (hit) {
-            return hit || caches.match('./');
-          });
-        })
-      );
-      return;
-    }
+    // الشبكة أولاً: يضمن أحدث نسخة دائماً، مع الكاش كبديل عند انقطاع الاتصال
     e.respondWith(
-      caches.match(req).then(function (hit) {
-        if (hit) {
-          // refresh in background
-          fetch(req).then(function (res) {
-            if (res && res.ok) caches.open(VERSION).then(function (c) { c.put(req, res.clone()); });
-          }).catch(function () {});
-          return hit;
+      fetch(req).then(function (res) {
+        if (res && res.ok) {
+          var copy = res.clone();
+          caches.open(VERSION).then(function (c) {
+            if (req.mode === 'navigate') c.put('./index.html', copy);
+            else c.put(req, copy);
+          });
         }
-        return fetch(req).then(function (res) {
-          if (res && res.ok) {
-            var copy = res.clone();
-            caches.open(VERSION).then(function (c) { c.put(req, copy); });
+        return res;
+      }).catch(function () {
+        return caches.match(req).then(function (hit) {
+          if (hit) return hit;
+          if (req.mode === 'navigate') {
+            return caches.match('./index.html').then(function (idx) { return idx || caches.match('./'); });
           }
-          return res;
-        }).catch(function () {
           return new Response('', { status: 504, statusText: 'Offline' });
         });
       })
