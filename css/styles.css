@@ -574,6 +574,8 @@ input[type="color"]{width:46px;height:36px;border:1px solid var(--border);border
 .optChip--task.is-on{background:var(--brand-500); border-color:var(--brand-500)}
 .optChip--meeting.is-on{background:var(--violet-500); border-color:var(--violet-500)}
 .optChip--reminder.is-on{background:var(--amber-500); border-color:var(--amber-500)}
+.optChip--quick{border-style:dashed}
+.optChip--quick:hover{border-color:var(--brand-500); color:var(--brand-600); background:color-mix(in srgb, var(--brand-500) 8%, transparent)}
 .field.full{grid-column:1/-1}
 
 /* ============ LEGEND / SWATCH ============ */

@@ -377,6 +377,7 @@
       id: uid('t'), title: '', notes: '', date: todayISO(), time: '', endTime: '', duration: 30,
       category: 'personal', priority: 'med', status: 'todo', reminder: true,
       type: 'task',           // task | meeting | appointment | reminder
+      remindOffset: null,     // دقائق قبل الموعد (null = الافتراضي العام)
       repeat: 'none', createdAt: Date.now(), doneAt: null, remindedAt: null,
       whatsappSentAt: null, archived: false, archivedAt: null, deletedAt: null, tags: []
     }, task || {});

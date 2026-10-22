@@ -1033,12 +1033,32 @@
       ['none', 'daily', 'weekly', 'biweekly', 'monthly', 'yearly'].map(function (r) {
         return '<option value="' + r + '"' + (t.repeat === r ? ' selected' : '') + '>' + cycleLabel(r) + '</option>';
       }).join('') + '</select></div>' +
+
+      '<div class="field full"><label>تحديد سريع للوقت</label><div class="optRow" id="fQuickT">' +
+      '<button type="button" class="optChip optChip--quick" data-q="now">الآن</button>' +
+      '<button type="button" class="optChip optChip--quick" data-q="30">بعد 30 د</button>' +
+      '<button type="button" class="optChip optChip--quick" data-q="60">بعد ساعة</button>' +
+      '<button type="button" class="optChip optChip--quick" data-q="120">بعد ساعتين</button>' +
+      '<button type="button" class="optChip optChip--quick" data-q="clear">مسح الوقت</button>' +
+      '</div></div>' +
       '</div>' +
 
       '<div class="setRow" style="border-top:1px solid var(--border)">' +
       '<div><strong>تذكير في الوقت المحدّد</strong><small>سيصلك تنبيه صوتي ومرئي عند الموعد</small></div>' +
       '<label class="switch"><input type="checkbox" id="fReminder"' + (t.reminder !== false ? ' checked' : '') + '><i></i></label>' +
       '</div>' +
+      '<div class="setRow">' +
+      '<div><strong>وقت التنبيه</strong><small>متى يصلك التذكير والواتساب قبل الموعد</small></div>' +
+      '<select class="select" id="fRemindLead" style="max-width:180px">' +
+      '<option value="-1"' + (t.remindOffset == null ? ' selected' : '') + '>افتراضي (' + settings().lead + ' د)</option>' +
+      '<option value="0"' + (t.remindOffset === 0 ? ' selected' : '') + '>في الموعد</option>' +
+      '<option value="10"' + (t.remindOffset === 10 ? ' selected' : '') + '>قبل 10 دقائق</option>' +
+      '<option value="15"' + (t.remindOffset === 15 ? ' selected' : '') + '>قبل 15 دقيقة</option>' +
+      '<option value="30"' + (t.remindOffset === 30 ? ' selected' : '') + '>قبل 30 دقيقة</option>' +
+      '<option value="60"' + (t.remindOffset === 60 ? ' selected' : '') + '>قبل ساعة</option>' +
+      '<option value="120"' + (t.remindOffset === 120 ? ' selected' : '') + '>قبل ساعتين</option>' +
+      '<option value="1440"' + (t.remindOffset === 1440 ? ' selected' : '') + '>قبل يوم</option>' +
+      '</select></div>' +
       '<div class="setRow">' +
       '<div><strong>الحالة</strong><small>قيد التنفيذ أو منجزة</small></div>' +
       '<select class="select" id="fStatus" style="max-width:150px">' +
@@ -1086,6 +1106,10 @@
               duration: parseInt(body.querySelector('#fDuration').value, 10) || 30,
               repeat: body.querySelector('#fRepeat').value,
               reminder: body.querySelector('#fReminder').checked,
+              remindOffset: (function () {
+                var v = parseInt(body.querySelector('#fRemindLead').value, 10);
+                return isNaN(v) || v < 0 ? null : v;
+              })(),
               status: body.querySelector('#fStatus').value,
               fields: readFieldValues(body, cfields)
             };
@@ -1105,7 +1129,8 @@
               UI.toast({ type: 'ok', title: 'تم حفظ التعديلات' });
             } else {
               Store.addTask(payload);
-              UI.toast({ type: 'ok', title: 'تمت إضافة المهمة', text: payload.time ? 'سيصلك تذكير قبل الموعد بـ ' + settings().lead + ' دقيقة.' : 'أُضيفت إلى قائمتك.' });
+              var eff = payload.remindOffset == null ? settings().lead : payload.remindOffset;
+              UI.toast({ type: 'ok', title: 'تمت إضافة المهمة', text: payload.time ? 'سيصلك تنبيه ' + (eff === 0 ? 'في الموعد' : 'قبل الموعد بـ ' + eff + ' دقيقة') + '.' : 'أُضيفت إلى قائمتك.' });
             }
             renderAll();
           }
@@ -1168,6 +1193,27 @@
         var d = e2 - s;
         if (d <= 0) d += 1440;
         fDur.value = d;
+      });
+    }
+
+    /* تحديد سريع للوقت: الآن / بعد 30 د / بعد ساعة / مسح */
+    var qWrap = body.querySelector('#fQuickT');
+    var fDate = body.querySelector('#fDate');
+    if (qWrap && fTime && fDate) {
+      qWrap.addEventListener('click', function (e) {
+        var chip = e.target.closest('[data-q]'); if (!chip) return;
+        var q = chip.dataset.q;
+        if (q === 'clear') {
+          fTime.value = ''; fEnd.value = '';
+          return;
+        }
+        var plus = q === 'now' ? 0 : parseInt(q, 10);
+        var d = new Date(Date.now() + plus * 60000);
+        var total = d.getHours() * 60 + d.getMinutes();
+        total = Math.ceil(total / 5) * 5;      /* تقريب لأقرب 5 دقائق */
+        fTime.value = hhmm(total);
+        fDate.value = today();
+        fTime.dispatchEvent(new Event('change'));
       });
     }
     return m;
@@ -1629,9 +1675,10 @@
     tasks().forEach(function (t) {
       if (t.status === 'done' || !t.reminder || !t.date || !t.time) return;
       if (t.remindedAt) return;
+      var tLead = (t.remindOffset == null) ? lead : t.remindOffset;
       var p = t.time.split(':');
       var atMin = parseInt(p[0], 10) * 60 + parseInt(p[1], 10);
-      var fireMin = atMin - lead;
+      var fireMin = atMin - tLead;
       var due = nowMin >= fireMin && nowMin <= atMin + 3;
       if (!due) return;
       fireReminder(t);
@@ -1651,9 +1698,10 @@
     tasks().forEach(function (t) {
       if (t.status === 'done' || !t.reminder || !t.date || !t.time) return;
       if (t.whatsappSentAt) return;
+      var tLead = (t.remindOffset == null) ? lead : t.remindOffset;
       var p = t.time.split(':');
       var atMin = parseInt(p[0], 10) * 60 + parseInt(p[1], 10);
-      var fireMin = atMin - lead;
+      var fireMin = atMin - tLead;
       if (nowMin < fireMin || nowMin > atMin + 5) return;
       sendWhatsapp(t);
     });
