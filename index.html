@@ -17,7 +17,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800;900&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/styles.css?v=8">
+<link rel="stylesheet" href="css/styles.css?v=9">
 </head>
 <body>
 
@@ -748,6 +748,10 @@
               <div><strong>مزامنة الآن</strong><small>تنزيل البيانات من Supabase وتحديث الجهاز</small></div>
               <button class="btn btn--soft btn--sm" id="sbSyncBtn"><svg viewBox="0 0 24 24"><use href="#i-repeat"/></svg><span>مزامنة</span></button>
             </div>
+            <div class="setRow">
+              <div><strong>إلغاء الربط</strong><small>العودة للتخزين المحلي على هذا الجهاز</small></div>
+              <button class="btn btn--ghost btn--sm" id="sbDisableBtn"><svg viewBox="0 0 24 24"><use href="#i-x"/></svg><span>إلغاء الربط</span></button>
+            </div>
             <p class="finePrint" id="sbHint">بعد ربط Supabase ستتم المصادقة عبر Supabase Auth، وسيتم تطبيق سياسات RLS التي تحصر كل مستخدم في بياناته. ملف <b>supabase/schema.sql</b> يحتوي على الجداول والسياسات الجاهزة للتشغيل في SQL Editor.</p>
           </div>
 
@@ -845,12 +849,12 @@
 <div class="modalHost" id="modalHost" hidden></div>
 <div class="srOnly" id="liveRegion" aria-live="polite" aria-atomic="true"></div>
 
-<script src="js/store.js?v=8"></script>
-<script src="js/sb.js?v=8"></script>
-<script src="js/voice.js?v=8"></script>
-<script src="js/notify.js?v=8"></script>
-<script src="js/charts.js?v=8"></script>
-<script src="js/ui.js?v=8"></script>
-<script src="js/app.js?v=8"></script>
+<script src="js/store.js?v=9"></script>
+<script src="js/sb.js?v=9"></script>
+<script src="js/voice.js?v=9"></script>
+<script src="js/notify.js?v=9"></script>
+<script src="js/charts.js?v=9"></script>
+<script src="js/ui.js?v=9"></script>
+<script src="js/app.js?v=9"></script>
 </body>
 </html>

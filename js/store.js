@@ -237,20 +237,26 @@
     return null;
   }
 
+  function fail(msg, code) {
+    var e = new Error(msg);
+    e.code = code || 'ERROR';
+    return Promise.reject(e);
+  }
+
   function register(opts) {
     opts = opts || {};
     var email = normEmail(opts.email);
     var name = String(opts.name || '').trim();
     var password = String(opts.password || '');
 
-    if (!name) return Promise.reject(new Error('الرجاء إدخال الاسم.'));
-    if (!emailValid(email)) return Promise.reject(new Error('صيغة البريد الإلكتروني غير صحيحة.'));
-    if (password.length < 6) return Promise.reject(new Error('كلمة المرور يجب ألا تقل عن 6 أحرف.'));
+    if (!name) return fail('الرجاء إدخال الاسم.', 'NAME');
+    if (!emailValid(email)) return fail('صيغة البريد الإلكتروني غير صحيحة.', 'EMAIL');
+    if (password.length < 6) return fail('كلمة المرور يجب ألا تقل عن 6 أحرف.', 'PASSWORD');
 
     if (supabaseMode()) {
       return SB.signUp(email, password, name).then(function (r) {
         if (r.needsConfirmation) {
-          throw new Error('تم إنشاء الحساب — تحقّق من بريدك الإلكتروني ثم سجّل الدخول.');
+          return fail('تم إنشاء الحساب — تحقّق من بريدك الإلكتروني لتفعيله ثم سجّل الدخول.', 'CONFIRM');
         }
         return SB.signIn(email, password).then(function (sess) {
           var s = { userId: sess.user.id, ts: Date.now(), remember: true, sb: true };
@@ -258,12 +264,27 @@
           loadData();
           return syncPull().then(function () { return currentUser(); });
         });
+      }).catch(function (err) {
+        var msg = (err && err.message) || '';
+        if (/already|registered|exists|duplicate/i.test(msg) || (err && err.status === 422) || (err && err.status === 400)) {
+          return fail('هذا البريد مسجّل بالفعل على Supabase — سجّل الدخول بدلاً من ذلك.', 'EMAIL_EXISTS');
+        }
+        throw err;
       });
+    }
+
+    /* لا يمكن تسجيل نفس البريد مرتين — حتى لا تضيع بيانات الحساب السابق */
+    if (findUserByEmail(email)) {
+      return fail('هذا البريد مسجّل بالفعل على هذا الجهاز — سجّل الدخول بكلمة المرور.', 'EMAIL_EXISTS');
     }
 
     var salt = makeSalt();
     return hashPassword(password, salt).then(function (hash) {
       var all = loadUsers();
+      /* فحص أخير قبل الحفظ (حماية من التزامن) */
+      if (findUserByEmail(email)) {
+        return fail('هذا البريد مسجّل بالفعل على هذا الجهاز — سجّل الدخول بكلمة المرور.', 'EMAIL_EXISTS');
+      }
       var id = uid('u');
       all[id] = { id: id, name: name, email: email, salt: salt, hash: hash, createdAt: Date.now() };
       writeJSON(K_USERS, all);

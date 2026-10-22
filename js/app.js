@@ -2102,6 +2102,23 @@
     }
   }
 
+  /* ---------------- signup / login errors ---------------- */
+  function showFormError(el, msg, opts) {
+    opts = opts || {};
+    el.innerHTML = UI.esc(msg) + (opts.action
+      ? ' <button type="button" class="formError__action" data-form-action="' + UI.esc(opts.action) + '">' + UI.esc(opts.actionLabel || 'تسجيل الدخول') + '</button>'
+      : '');
+    el.hidden = false;
+  }
+  function clearFormError(el) { el.hidden = true; el.innerHTML = ''; }
+
+  function switchToLogin(email) {
+    switchAuthTab('login');
+    if (email) $('#loginEmail').value = email;
+    $('#loginPassword').value = '';
+    $('#loginPassword').focus();
+  }
+
   /* ==========================================================
      settings wiring
      ========================================================== */
@@ -2174,8 +2191,8 @@
         try { enterApp(user); }
         catch (ex) { UI.toast({ type: 'err', title: 'تعذّر فتح التطبيق', text: ex.message }); }
       }).catch(function (ex) {
-        err.textContent = ex.message || 'تعذّر تسجيل الدخول.';
-        err.hidden = false;
+        var msg = (ex && ex.message) || 'تعذّر تسجيل الدخول.';
+        showFormError($('#loginError'), msg, { action: 'signup', actionLabel: 'إنشاء حساب جديد' });
       });
     });
 
@@ -2187,8 +2204,8 @@
       var pass = $('#signupPassword').value;
       var pass2 = $('#signupPassword2').value;
       var err = $('#signupError');
-      err.hidden = true;
-      if (pass !== pass2) { err.textContent = 'كلمتا المرور غير متطابقتين.'; err.hidden = false; return; }
+      clearFormError(err);
+      if (pass !== pass2) { showFormError(err, 'كلمتا المرور غير متطابقتين.'); return; }
       Store.register({ name: name, email: email, password: pass }).then(function (user) {
         if (Store.supabaseMode()) return user;
         return Store.login(email, pass, true).then(function () { return user; });
@@ -2199,9 +2216,31 @@
         try { enterApp(user); }
         catch (ex) { UI.toast({ type: 'err', title: 'تعذّر فتح التطبيق', text: ex.message }); }
       }).catch(function (ex) {
-        err.textContent = ex.message || 'تعذّر إنشاء الحساب.';
-        err.hidden = false;
+        var code = (ex && ex.code) || 'ERROR';
+        if (code === 'EMAIL_EXISTS') {
+          showFormError(err, ex.message, { action: 'login', actionLabel: 'لديّ حساب بالفعل' });
+        } else if (code === 'CONFIRM') {
+          clearFormError(err);
+          UI.toast({ type: 'info', title: 'تم إنشاء الحساب', text: 'تحقّق من بريدك الإلكتروني ثم سجّل الدخول.', duration: 9000 });
+          switchToLogin(email);
+        } else {
+          showFormError(err, (ex && ex.message) || 'تعذّر إنشاء الحساب.');
+        }
       });
+    });
+
+    /* إجراءات داخل رسائل الأخطاء (تسجيل الدخول أو إنشاء حساب جديد) */
+    document.addEventListener('click', function (e) {
+      var b = e.target.closest('[data-form-action]');
+      if (!b) return;
+      var mail = $('#signupEmail').value.trim() || $('#loginEmail').value.trim();
+      if (b.dataset.formAction === 'signup') {
+        switchAuthTab('signup');
+        if (mail) $('#signupEmail').value = mail;
+        $('#signupName').focus();
+      } else {
+        switchToLogin(mail);
+      }
     });
 
     /* demo */
@@ -2438,6 +2477,19 @@
       Store.syncPull().then(function (ok) {
         renderAll();
         UI.toast({ type: ok ? 'ok' : 'err', title: ok ? 'تمت المزامنة' : 'تعذّرت المزامنة' });
+      });
+    });
+    $('#sbDisableBtn').addEventListener('click', function () {
+      UI.confirm({
+        title: 'إلغاء ربط Supabase', danger: true, confirmLabel: 'إلغاء الربط',
+        text: 'سيعود التطبيق إلى التخزين المحلي على هذا الجهاز. لن تُحذف بياناتك المحفوظة محلياً.'
+      }).then(function (ok) {
+        if (!ok) return;
+        SB.configure('', '');
+        try { localStorage.removeItem('secretary:v1:sb'); } catch (e) { }
+        try { localStorage.removeItem('secretary:v1:sb_session'); } catch (e) { }
+        renderSupabaseSettings();
+        UI.toast({ type: 'ok', title: 'تم إلغاء الربط', text: 'التطبيق يعمل الآن بالتخزين المحلي.' });
       });
     });
     $('#emptyTrashBtn').addEventListener('click', function () {

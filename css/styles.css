@@ -163,8 +163,13 @@ svg{width:1em; height:1em; fill:none; stroke:currentColor; stroke-width:1.8; str
 .hint{display:block; margin-top:6px; font-size:12px; color:var(--muted)}
 .formError{
   background:var(--rose-50); color:var(--rose-600); border:1px solid #fecdd3; border-radius:var(--r-md);
-  padding:10px 14px; font-size:13.5px; font-weight:600; margin-bottom:14px;
+  padding:10px 14px; font-size:13.5px; font-weight:600; margin-bottom:14px; line-height:1.7;
 }
+.formError__action{
+  display:inline-block; margin-inline-start:6px; font-weight:800; color:var(--rose-600);
+  text-decoration:underline; font-size:13px; white-space:nowrap;
+}
+.formError__action:hover{color:var(--brand-600)}
 [data-theme="dark"] .formError{border-color:#7f1d3a}
 
 .input, .select, textarea.input{
