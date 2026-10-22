@@ -15,7 +15,10 @@
     lead: 30,
     apikey: '',
     phoneNumberId: '',
-    accessToken: ''
+    accessToken: '',
+    target: 'number',     // number | group
+    groupLink: '',        // https://chat.whatsapp.com/XXXX
+    groupId: ''           // معرّف المجموعة (Meta Cloud API)
   };
 
   var cfg = Object.assign({}, defaults);
@@ -38,7 +41,24 @@
     return d.length >= 8 && d.length <= 15;
   }
   function enabled() {
+    if (cfg.target === 'group') return !!(cfg.enabled && groupCode());
     return !!(cfg.enabled && validPhone(cfg.phone));
+  }
+
+  /* ---------- المجموعات (قروب الأولياء) ---------- */
+  function groupCode(link) {
+    var s = String(link || cfg.groupLink || '');
+    var m = s.match(/chat\.whatsapp\.com\/([A-Za-z0-9]+)/);
+    if (m) return m[1];
+    m = s.match(/^([A-Za-z0-9]{8,})$/);
+    return m ? m[1] : '';
+  }
+  function groupUrl(link) {
+    var code = groupCode(link);
+    return code ? ('https://chat.whatsapp.com/' + code) : '';
+  }
+  function groupReady() {
+    return !!(cfg.groupLink || cfg.groupId);
   }
 
   /* ---------- 1) رابط محادثة واتساب ---------- */
@@ -73,6 +93,15 @@
     if (!cfg.accessToken || !cfg.phoneNumberId) {
       return Promise.reject(new Error('يلزم Phone Number ID و Access Token من Meta for Developers.'));
     }
+    var to = cfg.target === 'group' ? (cfg.groupId || '') : cleanPhone(cfg.phone);
+    if (!to) return Promise.reject(new Error('حدّد معرّف المجموعة (Group ID) من Meta.'));
+    var payload = {
+      messaging_product: 'whatsapp',
+      to: to,
+      type: 'text',
+      text: { body: text }
+    };
+    if (cfg.target === 'group') payload.recipient_type = 'group';
     var url = 'https://graph.facebook.com/v19.0/' + encodeURIComponent(cfg.phoneNumberId) + '/messages';
     return fetch(url, {
       method: 'POST',
@@ -80,13 +109,7 @@
         Authorization: 'Bearer ' + cfg.accessToken,
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({
-        messaging_product: 'whatsapp',
-        recipient_type: 'individual',
-        to: cleanPhone(cfg.phone),
-        type: 'text',
-        text: { body: text }
-      })
+      body: JSON.stringify(payload)
     }).then(function (r) {
       return r.text().then(function (t) {
         if (!r.ok) {
@@ -102,13 +125,24 @@
   /* ---------- الإرسال الموحّد ---------- */
   function send(text, opts) {
     opts = opts || {};
-    if (!enabled()) return Promise.resolve({ skipped: true });
+    if (!cfg.enabled) return Promise.resolve({ skipped: true });
     var body = String(text || '').slice(0, 900);
 
+    /* --- مجموعة واتساب (قروب الأولياء) --- */
+    if (cfg.target === 'group') {
+      if (cfg.provider === 'callmebot') {
+        return Promise.reject(new Error('CallMeBot لا يدعم المجموعات — استخدم رابط الدعوة أو Meta Cloud API.'));
+      }
+      if (cfg.provider === 'meta') return metaCloud(body);
+      var url = groupUrl();
+      if (!url) return Promise.reject(new Error('أضف رابط دعوة المجموعة (chat.whatsapp.com/...).'));
+      return Promise.resolve({ link: url, needTap: true, group: true });
+    }
+
+    /* --- رقم فردي --- */
+    if (!validPhone(cfg.phone)) return Promise.resolve({ skipped: true });
     if (cfg.provider === 'callmebot') return callMeBot(body);
     if (cfg.provider === 'meta') return metaCloud(body);
-
-    // link: لا يمكن الفتح التلقائي بسبب حجب النوافذ → نعيد الرابط ونترك المستخدم يضغط
     return Promise.resolve({ link: chatLink(body), needTap: true });
   }
 
@@ -126,6 +160,9 @@
     cleanPhone: cleanPhone,
     chatLink: chatLink,
     openChat: openChat,
+    groupCode: groupCode,
+    groupUrl: groupUrl,
+    groupReady: groupReady,
     send: send,
     test: test
   };

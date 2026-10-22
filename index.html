@@ -17,7 +17,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800;900&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/styles.css">
+<link rel="stylesheet" href="css/styles.css?v=7">
 </head>
 <body>
 
@@ -66,6 +66,7 @@
     <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 7.2A1.7 1.7 0 0 1 4.7 5.5h4.1l2 2.6h8.5a1.7 1.7 0 0 1 1.7 1.7v7.7a1.7 1.7 0 0 1-1.7 1.7H4.7a1.7 1.7 0 0 1-1.7-1.7z"/></symbol>
     <symbol id="i-send" viewBox="0 0 24 24"><path d="M21 3L10.5 13.5M21 3l-6.8 18-3.7-7.5L3 9.8z"/></symbol>
     <symbol id="i-cloud" viewBox="0 0 24 24"><path d="M7 18.5A4.5 4.5 0 0 1 7 9.6a5.5 5.5 0 0 1 10.5 1.4A3.9 3.9 0 0 1 17 18.5z"/></symbol>
+    <symbol id="i-group" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 19a5.5 5.5 0 0 1 11 0"/><path d="M16 5.6a3.2 3.2 0 0 1 0 5.8M17 14.2a5.5 5.5 0 0 1 3.5 4.8"/></symbol>
     <symbol id="i-archive" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="4.5" rx="1.4"/><path d="M5 8.5V18a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8.5M10 12.5h4"/></symbol>
     <symbol id="i-restore" viewBox="0 0 24 24"><path d="M4 9.5A3.5 3.5 0 0 1 7.5 6H19l-2.6-2.6M20 14.5a3.5 3.5 0 0 1-3.5 3.5H5l2.6 2.6"/></symbol>
   </defs>
@@ -257,6 +258,7 @@
             <p class="hero__sub" id="heroSub">لديك — مهمة اليوم.</p>
           </div>
           <div class="hero__actions">
+            <button class="btn btn--ghost" id="heroParentsBtn"><svg viewBox="0 0 24 24"><use href="#i-group"/></svg><span>تنبيه الأولياء</span></button>
             <button class="btn btn--ghost" id="heroReadBtn"><svg viewBox="0 0 24 24"><use href="#i-speak"/></svg><span>اقرأ جدولي</span></button>
             <button class="btn btn--white" id="heroAddBtn"><svg viewBox="0 0 24 24"><use href="#i-plus"/></svg><span>أضف مهمة</span></button>
           </div>
@@ -634,6 +636,13 @@
               <input type="range" id="waLead" min="5" max="180" step="5" value="30" aria-label="وقت تذكير واتساب">
             </div>
             <div class="setRow setRow--stack">
+              <div><strong>من يستقبل التذكير</strong><small>رقم فردي أو مجموعة واتساب</small></div>
+              <select class="select" id="waTarget" aria-label="المستهدف">
+                <option value="number">رقم فردي</option>
+                <option value="group">مجموعة واتساب (قروب الأولياء)</option>
+              </select>
+            </div>
+            <div class="setRow setRow--stack">
               <div><strong>طريقة الإرسال</strong><small>اختر حسب ما يتوفر لديك</small></div>
               <select class="select" id="waProvider" aria-label="طريقة الإرسال">
                 <option value="link">رابط محادثة جاهز (بدون إعدادات)</option>
@@ -687,6 +696,51 @@
           </div>
 
           <div class="card">
+            <div class="card__head">
+              <h3><svg viewBox="0 0 24 24"><use href="#i-group"/></svg> قروب أولياء الأمور</h3>
+              <span class="chip" id="pgChip">غير مُعد</span>
+            </div>
+            <p class="cardHint">أرسل تنبيهات ووصلات اليوم إلى مجموعة واتساب خاصة بأولياء الأمور — بلا الحاجة لكتابة كل مرة.</p>
+            <div class="setRow setRow--stack">
+              <div><strong>رابط دعوة المجموعة</strong><small>انسخ رابط الدعوة من داخل واتساب ← معلومات المجموعة ← إضافة إلى مجموعة</small></div>
+              <input class="input ltr" id="pgLink" type="url" placeholder="https://chat.whatsapp.com/XXXXXXXXXXXX">
+            </div>
+            <div class="setRow setRow--stack">
+              <div><strong>معرّف المجموعة (اختياري)</strong><small>مطلوب فقط عند الإرسال التلقائي عبر Meta Cloud API</small></div>
+              <input class="input ltr" id="pgId" type="text" placeholder="1203630... أو 123456789@g.us">
+            </div>
+            <div class="setRow setRow--stack">
+              <div><strong>نص الترويسة</strong><small>يظهر في أعلى كل رسالة</small></div>
+              <input class="input" id="pgHeader" type="text" placeholder="📢 تذكير من إدارة المدرسة — نرجو الاطلاع">
+            </div>
+            <div class="setRow">
+              <div><strong>الملخص اليومي التلقائي</strong><small>إرسال مواعيد اليوم للمجموعة كل صباح</small></div>
+              <label class="switch"><input type="checkbox" id="pgAuto"><i></i></label>
+            </div>
+            <div class="setRow setRow--stack">
+              <div><strong>وقت الإرسال التلقائي</strong><small><span id="pgTimeVal">07:00</span></small></div>
+              <input type="range" id="pgTime" min="0" max="23" step="1" value="7" aria-label="وقت الإرسال للمجموعة">
+            </div>
+            <div class="setRow setRow--stack">
+              <div><strong>رسالة مخصصة للمجموعة</strong><small>اكتب رسالتك وأرسلها مباشرة</small></div>
+              <textarea class="input" id="pgMsg" rows="3" placeholder="مثال: نرجو من أولياء الأمور الحضور قبل التاسعة للدفع المتأخر."></textarea>
+            </div>
+            <div class="setRow">
+              <div><strong>إرسال الرسالة المخصصة</strong><small>تُنسخ إلى الحافظة ويفتح واتساب</small></div>
+              <button class="btn btn--soft btn--sm" id="pgSendMsgBtn"><svg viewBox="0 0 24 24"><use href="#i-send"/></svg><span>إرسال</span></button>
+            </div>
+            <div class="setRow">
+              <div><strong>إرسال ملخص اليوم</strong><small>مواعيد اليوم + المهام المحددة</small></div>
+              <button class="btn btn--soft btn--sm" id="pgSummaryBtn"><svg viewBox="0 0 24 24"><use href="#i-group"/></svg><span>الملخص</span></button>
+            </div>
+            <div class="setRow">
+              <div><strong>إرسال رسالة تجريبية</strong><small>تأكد من وصولها للمجموعة</small></div>
+              <button class="btn btn--soft btn--sm" id="pgTestBtn"><svg viewBox="0 0 24 24"><use href="#i-send"/></svg><span>تجربة</span></button>
+            </div>
+            <p class="finePrint" id="pgHint"></p>
+          </div>
+
+          <div class="card">
             <div class="card__head"><h3><svg viewBox="0 0 24 24"><use href="#i-download"/></svg> البيانات والنسخ الاحتياطي</h3></div>
             <div class="setRow">
               <div><strong>تصدير بياناتي</strong><small>ملف JSON يحتوي على مهامك وخططك وملاحظاتك</small></div>
@@ -727,12 +781,12 @@
 <div class="modalHost" id="modalHost" hidden></div>
 <div class="srOnly" id="liveRegion" aria-live="polite" aria-atomic="true"></div>
 
-<script src="js/store.js"></script>
-<script src="js/sb.js"></script>
-<script src="js/voice.js"></script>
-<script src="js/notify.js"></script>
-<script src="js/charts.js"></script>
-<script src="js/ui.js"></script>
-<script src="js/app.js"></script>
+<script src="js/store.js?v=7"></script>
+<script src="js/sb.js?v=7"></script>
+<script src="js/voice.js?v=7"></script>
+<script src="js/notify.js?v=7"></script>
+<script src="js/charts.js?v=7"></script>
+<script src="js/ui.js?v=7"></script>
+<script src="js/app.js?v=7"></script>
 </body>
 </html>

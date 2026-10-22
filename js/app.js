@@ -462,6 +462,7 @@
         '</div></div>' +
         '<div class="tlRow__acts">' +
         '<button class="iconBtn" data-speak="' + t.id + '" title="اقرأ بصوت">' + UI.icon('speak') + '</button>' +
+        '<button class="iconBtn" data-send-group="' + t.id + '" title="تنبيه أولياء الأمور">' + UI.icon('group') + '</button>' +
         '<button class="iconBtn" data-archive-task="' + t.id + '" title="أرشفة">' + UI.icon('archive') + '</button>' +
         '<button class="iconBtn" data-edit="' + t.id + '" title="تعديل">' + UI.icon('edit') + '</button>' +
         '<button class="iconBtn" data-del="' + t.id + '" title="حذف">' + UI.icon('trash') + '</button>' +
@@ -632,6 +633,8 @@
           '<td>' + (t.status === 'done' ? '<span class="chip chip--ok">منجزة</span>' : '<span class="chip">قيد التنفيذ</span>') + '</td>' +
           '<td><div class="table__acts">' +
           '<button class="iconBtn" data-speak="' + t.id + '" title="اقرأ">' + UI.icon('speak') + '</button>' +
+          '<button class="iconBtn" data-send-group="' + t.id + '" title="تنبيه أولياء الأمور">' + UI.icon('group') + '</button>' +
+          '<button class="iconBtn" data-archive-task="' + t.id + '" title="أرشفة">' + UI.icon('archive') + '</button>' +
           '<button class="iconBtn" data-edit="' + t.id + '" title="تعديل">' + UI.icon('edit') + '</button>' +
           '<button class="iconBtn" data-del="' + t.id + '" title="حذف">' + UI.icon('trash') + '</button>' +
           '</div></td></tr>';
@@ -701,6 +704,7 @@
         '<div class="planCard__acts">' +
         '<button class="btn btn--soft btn--sm" data-renew="' + p.id + '">' + UI.icon('repeat') + 'جدّد</button>' +
         '<button class="iconBtn" data-speak-plan="' + p.id + '" title="اقرأ">' + UI.icon('speak') + '</button>' +
+        '<button class="iconBtn" data-send-group-plan="' + p.id + '" title="تنبيه أولياء الأمور">' + UI.icon('group') + '</button>' +
         '<button class="iconBtn" data-archive-plan="' + p.id + '" title="أرشفة">' + UI.icon('archive') + '</button>' +
         '<button class="iconBtn" data-edit-plan="' + p.id + '" title="تعديل">' + UI.icon('edit') + '</button>' +
         '<button class="iconBtn" data-del-plan="' + p.id + '" title="حذف">' + UI.icon('trash') + '</button>' +
@@ -780,6 +784,7 @@
     renderCustomFields();
     renderFieldFilter();
     renderWhatsAppSettings();
+    renderParentsSettings();
     renderSupabaseSettings();
   }
 
@@ -1411,6 +1416,7 @@
     processPlans();
     processDigest(nowMin, s);
     processWhatsApp(nowMin);
+    processParentsDigest(nowMin);
   }
 
   /* ---------- تذكير واتساب ---------- */
@@ -1534,6 +1540,21 @@
     parts.push('أنجزت ' + done + ' منها.');
     Voice.speakList(parts.map(function (x) { return Voice.naturalize(x); }));
     Store.patch(function (dd) { dd.lastDigest = todayStr; });
+  }
+
+  /* ---------- الملخص اليومي التلقائي لمجموعة الأولياء ---------- */
+  function processParentsDigest(nowMin) {
+    var p = pgConfig();
+    if (!p.auto || !p.link) return;
+    var d = D(); if (!d) return;
+    var day = today();
+    if (d.lastParentsDigest === day) return;
+    var hh = parseInt((p.time || '07:00').split(':')[0], 10);
+    var mm = parseInt((p.time || '07:00').split(':')[1] || '0', 10);
+    var at = hh * 60 + mm;
+    if (nowMin < at || nowMin > at + 20) return;
+    Store.patch(function (dd) { dd.lastParentsDigest = day; });
+    sendToParents(buildParentsSummary(day), { title: 'تم إرسال الملخص اليومي للمجموعة' });
   }
 
   function notify(title, bodyText) {
@@ -1690,13 +1711,140 @@
   /* ---------------- واتساب ---------------- */
   function waConfig() {
     var s = settings();
-    return s.whatsapp || (s.whatsapp = {
-      enabled: false, phone: '', provider: 'link', lead: 30, apikey: '', phoneNumberId: '', accessToken: ''
-    });
+    if (!s.whatsapp) {
+      s.whatsapp = { enabled: false, phone: '', provider: 'link', lead: 30, apikey: '', phoneNumberId: '', accessToken: '', target: 'number' };
+    }
+    return s.whatsapp;
+  }
+  function pgConfig() {
+    var s = settings();
+    if (!s.parents) {
+      s.parents = {
+        link: '', groupId: '',
+        header: '📢 تذكير من إدارة المدرسة — نرجو الاطلاع',
+        auto: false, time: '07:00', category: 'all'
+      };
+    }
+    return s.parents;
   }
   function applyNotifyConfig() {
     var w = waConfig();
-    Notify.configure(w);
+    var p = pgConfig();
+    Notify.configure(Object.assign({}, w, {
+      target: w.target || 'number',
+      groupLink: p.link || w.groupLink || '',
+      groupId: p.groupId || w.groupId || ''
+    }));
+  }
+
+  /* ---------- بناء رسائل الأولياء ---------- */
+  function parentsHeader() {
+    return pgConfig().header || '📢 تذكير من إدارة المدرسة';
+  }
+  function parentsTasksOf(iso) {
+    var cat = pgConfig().category || 'all';
+    return tasksOn(iso).filter(function (t) {
+      if (t.status === 'done') return false;
+      if (!t.time) return false;
+      if (cat !== 'all' && t.category !== cat) return false;
+      return true;
+    });
+  }
+  function buildParentsSummary(iso) {
+    var d = iso || today();
+    var list = parentsTasksOf(d);
+    var lines = [parentsHeader(), ''];
+    lines.push('🗓️ *مواعيد ' + UI.weekdayName(d) + ' ' + UI.fmtDate(d, { year: false }) + '*');
+    if (!list.length) {
+      lines.push('لا توجد مواعيد مسجّلة في هذا اليوم.');
+    } else {
+      list.slice(0, 25).forEach(function (t) {
+        lines.push('• ' + t.time + ' — ' + t.title + (t.notes ? '\n   ' + t.notes : ''));
+      });
+    }
+    lines.push('');
+    lines.push('📌 للاستفسار تواصلوا مع الإدارة. شكراً لتعاونكم.');
+    return lines.join('\n');
+  }
+  function buildParentsTask(t) {
+    var lines = [parentsHeader(), ''];
+    lines.push('🔔 *تنبيه*: ' + t.title);
+    if (t.date) lines.push('📅 ' + UI.fmtDate(t.date, { weekday: true }));
+    if (t.time) lines.push('🕘 ' + Voice.timeToArabic(t.time));
+    if (t.notes) lines.push('📝 ' + t.notes);
+    lines.push('');
+    lines.push('📌 للاستفسار تواصلوا مع الإدارة.');
+    return lines.join('\n');
+  }
+  function buildParentsPlan(p) {
+    var d = Store.daysBetween(today(), p.expiryDate);
+    var lines = [parentsHeader(), ''];
+    lines.push('⏳ *تنبيه*: ' + p.title);
+    lines.push('📅 ينتهي في ' + UI.fmtDate(p.expiryDate, { weekday: true }) + ' — ' + UI.daysLabel(d));
+    if (p.note) lines.push('📝 ' + p.note);
+    return lines.join('\n');
+  }
+
+  /* ---------- الإرسال ---------- */
+  function copyToClipboard(text) {
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).catch(function () { });
+        return true;
+      }
+    } catch (e) { }
+    try {
+      var ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.top = '-1000px';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      var ok = document.execCommand('copy');
+      document.body.removeChild(ta);
+      return ok;
+    } catch (e) { return false; }
+  }
+
+  function sendToParents(text, opts) {
+    opts = opts || {};
+    var p = pgConfig();
+    if (!p.link && !p.groupId) {
+      UI.toast({
+        type: 'err', title: 'المجموعة غير مُعدّة',
+        text: 'أضف رابط دعوة المجموعة من الإعدادات ← قروب أولياء الأمور.'
+      });
+      return Promise.resolve(false);
+    }
+    applyNotifyConfig();
+    var w = waConfig();
+    Notify.configure(Object.assign({}, w, {
+      enabled: true, target: 'group',
+      groupLink: p.link, groupId: p.groupId,
+      provider: (w.provider === 'link' && opts.forceProvider) ? 'link' : w.provider
+    }));
+
+    return Notify.send(text).then(function (res) {
+      if (res && res.needTap) {
+        var copied = copyToClipboard(text);
+        UI.toast({
+          type: 'info', title: opts.title || 'الرسالة جاهزة للمجموعة',
+          text: (copied ? 'تم نسخ الرسالة إلى الحافظة. ' : '') + 'اضغط «فتح واتساب» ثم الصقها في المجموعة.',
+          duration: 0,
+          actions: [{
+            label: 'فتح واتساب',
+            onClick: function () { global.open(res.link, '_blank', 'noopener'); }
+          }]
+        });
+      } else {
+        UI.toast({ type: 'ok', title: opts.title || 'أُرسلت الرسالة', text: 'تم الإرسال إلى مجموعة الأولياء.' });
+      }
+      return true;
+    }).catch(function (e) {
+      UI.toast({ type: 'err', title: 'تعذّر الإرسال', text: e.message });
+      return false;
+    });
   }
 
   function renderWhatsAppSettings() {
@@ -1707,6 +1855,7 @@
     $('#waLead').value = w.lead || 30;
     $('#waLeadVal').textContent = w.lead || 30;
     $('#waProvider').value = w.provider || 'link';
+    if ($('#waTarget')) $('#waTarget').value = w.target || 'number';
     $('#waApiKey').value = w.apikey || '';
     $('#waPhoneId').value = w.phoneNumberId || '';
     $('#waToken').value = w.accessToken || '';
@@ -1723,9 +1872,14 @@
   }
   function syncWaRows() {
     var p = $('#waProvider').value;
+    var tgt = $('#waTarget') ? $('#waTarget').value : 'number';
     $('#waApiRow').hidden = p !== 'callmebot';
     $('#waMetaRow').hidden = p !== 'meta';
     $('#waTokenRow').hidden = p !== 'meta';
+    var phoneRow = $('#waPhone').closest('.setRow');
+    if (phoneRow) phoneRow.hidden = (tgt === 'group');
+    var leadRow = $('#waLead').closest('.setRow');
+    if (leadRow) leadRow.hidden = (tgt === 'group');
   }
   function saveWa() {
     var w = waConfig();
@@ -1733,10 +1887,42 @@
     w.phone = $('#waPhone').value.trim();
     w.lead = parseInt($('#waLead').value, 10) || 30;
     w.provider = $('#waProvider').value;
+    w.target = $('#waTarget') ? $('#waTarget').value : 'number';
     w.apikey = $('#waApiKey').value.trim();
     w.phoneNumberId = $('#waPhoneId').value.trim();
     w.accessToken = $('#waToken').value.trim();
     Store.setSetting('whatsapp', w);
+    applyNotifyConfig();
+  }
+
+  /* ---------- إعدادات قروب الأولياء ---------- */
+  function renderParentsSettings() {
+    var p = pgConfig();
+    var chip = $('#pgChip');
+    if (!chip) return;
+    var ready = !!(p.link || p.groupId);
+    chip.textContent = ready ? 'مُعدّ' : 'غير مُعد';
+    chip.className = 'chip ' + (ready ? 'chip--ok' : '');
+    if (document.activeElement !== $('#pgLink')) $('#pgLink').value = p.link || '';
+    if (document.activeElement !== $('#pgId')) $('#pgId').value = p.groupId || '';
+    if (document.activeElement !== $('#pgHeader')) $('#pgHeader').value = p.header || '';
+    $('#pgAuto').checked = !!p.auto;
+    var h = parseInt((p.time || '07:00').split(':')[0], 10) || 0;
+    $('#pgTime').value = h;
+    $('#pgTimeVal').textContent = (h < 10 ? '0' : '') + h + ':00';
+    $('#pgHint').textContent = ready
+      ? 'المجموعة جاهزة. في وضع «رابط الدعوة» تُنسخ الرسالة تلقائياً إلى الحافظة ويفتح واتساب — الصقها وأرسل. أما الإرسال التلقائي فيحتاج Meta Cloud API + Group ID.'
+      : 'انسخ رابط الدعوة من داخل واتساب: افتح المجموعة ← معلومات ← «إضافة إلى مجموعة» وانسخ الرابط.';
+  }
+  function saveParents() {
+    var p = pgConfig();
+    p.link = $('#pgLink').value.trim();
+    p.groupId = $('#pgId').value.trim();
+    p.header = $('#pgHeader').value.trim();
+    p.auto = $('#pgAuto').checked;
+    var h = parseInt($('#pgTime').value, 10) || 0;
+    p.time = (h < 10 ? '0' : '') + h + ':00';
+    Store.setSetting('parents', p);
     applyNotifyConfig();
   }
 
@@ -1913,6 +2099,10 @@
     $('#quickAddBtn').addEventListener('click', function () { taskModal(null); });
     $('#heroAddBtn').addEventListener('click', function () { taskModal(null); });
     $('#heroReadBtn').addEventListener('click', readDaySchedule);
+    $('#heroParentsBtn').addEventListener('click', function () {
+      var iso = state.view === 'day' ? dayDate(state.dayOffset) : today();
+      sendToParents(buildParentsSummary(iso), { title: 'ملخص اليوم جاهز للمجموعة' });
+    });
     $('#dayReadBtn').addEventListener('click', readDaySchedule);
     $('#lockBtn').addEventListener('click', lockApp);
 
@@ -2008,10 +2198,10 @@
     $('#tasksArchiveDoneBtn').addEventListener('click', archiveCompleted);
 
     /* whatsapp settings */
-    ['#waEnabled', '#waPhone', '#waLead', '#waProvider', '#waApiKey', '#waPhoneId', '#waToken'].forEach(function (sel) {
+    ['#waEnabled', '#waPhone', '#waLead', '#waProvider', '#waApiKey', '#waPhoneId', '#waToken', '#waTarget'].forEach(function (sel) {
       var el = $(sel);
       if (!el) return;
-      var ev = (sel === '#waProvider') ? 'change' : (sel === '#waLead' ? 'input' : 'change');
+      var ev = (sel === '#waProvider' || sel === '#waTarget') ? 'change' : (sel === '#waLead' ? 'input' : 'change');
       el.addEventListener(ev, function () { saveWa(); });
     });
     $('#waProvider').addEventListener('change', syncWaRows);
@@ -2035,6 +2225,33 @@
       }).catch(function (e) {
         UI.toast({ type: 'err', title: 'تعذّر الإرسال', text: e.message });
       });
+    });
+
+    /* parents group settings */
+    ['#pgLink', '#pgId', '#pgHeader', '#pgAuto'].forEach(function (sel) {
+      var el = $(sel);
+      if (!el) return;
+      el.addEventListener('change', function () { saveParents(); renderParentsSettings(); });
+    });
+    $('#pgTime').addEventListener('input', function () {
+      var h = parseInt(this.value, 10) || 0;
+      $('#pgTimeVal').textContent = (h < 10 ? '0' : '') + h + ':00';
+      saveParents();
+    });
+    $('#pgTestBtn').addEventListener('click', function () {
+      saveParents();
+      sendToParents(parentsHeader() + '\n\n✅ هذا اختبار من تطبيق سكرتاري — نظام تنبيه أولياء الأمور يعمل بشكل صحيح.', { title: 'رسالة تجريبية للمجموعة' });
+    });
+    $('#pgSendMsgBtn').addEventListener('click', function () {
+      var txt = $('#pgMsg').value.trim();
+      if (!txt) { UI.toast({ type: 'warn', title: 'اكتب الرسالة أولاً' }); return; }
+      saveParents();
+      sendToParents(parentsHeader() + '\n\n' + txt, { title: 'الرسالة جاهزة للإرسال' });
+    });
+    $('#pgSummaryBtn').addEventListener('click', function () {
+      saveParents();
+      var iso = state.view === 'day' ? dayDate(state.dayOffset) : today();
+      sendToParents(buildParentsSummary(iso), { title: 'ملخص اليوم جاهز للمجموعة' });
     });
 
     /* supabase settings */
@@ -2202,7 +2419,7 @@
   }
 
   function onDelegated(e) {
-    var el = e.target.closest('[data-toggle],[data-edit],[data-del],[data-speak],[data-open-task],[data-open-plan],[data-renew],[data-speak-plan],[data-edit-plan],[data-del-plan],[data-speak-note],[data-pin-note],[data-edit-note],[data-del-note],[data-msg-read],[data-msg-done],[data-add-task],[data-day],[data-edit-field],[data-del-field],[data-archive-task],[data-archive-plan],[data-archive-note],[data-unarchive],[data-trash],[data-restore],[data-purge]');
+    var el = e.target.closest('[data-toggle],[data-edit],[data-del],[data-speak],[data-open-task],[data-open-plan],[data-renew],[data-speak-plan],[data-edit-plan],[data-del-plan],[data-speak-note],[data-pin-note],[data-edit-note],[data-del-note],[data-msg-read],[data-msg-done],[data-add-task],[data-day],[data-edit-field],[data-del-field],[data-archive-task],[data-archive-plan],[data-archive-note],[data-unarchive],[data-trash],[data-restore],[data-purge],[data-send-group],[data-send-group-plan]');
     if (!el) return;
 
     if (el.hasAttribute('data-add-task')) { taskModal(null); return; }
@@ -2236,6 +2453,16 @@
     }
     if (el.dataset.delField) { deleteField(el.dataset.delField); return; }
     if (el.dataset.archiveTask) { doArchive('task', el.dataset.archiveTask); return; }
+    if (el.dataset.sendGroup) {
+      var sgt = Store.getTask(el.dataset.sendGroup);
+      if (sgt) sendToParents(buildParentsTask(sgt), { title: 'التنبيه جاهز للمجموعة' });
+      return;
+    }
+    if (el.dataset.sendGroupPlan) {
+      var sgp = plansAll().filter(function (x) { return x.id === el.dataset.sendGroupPlan; })[0];
+      if (sgp) sendToParents(buildParentsPlan(sgp), { title: 'التنبيه جاهز للمجموعة' });
+      return;
+    }
     if (el.dataset.archivePlan) { doArchive('plan', el.dataset.archivePlan); return; }
     if (el.dataset.archiveNote) { doArchive('note', el.dataset.archiveNote); return; }
     if (el.dataset.unarchive) {

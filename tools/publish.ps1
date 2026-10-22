@@ -43,6 +43,17 @@ New-Item -ItemType Directory -Path $stage | Out-Null
 Get-ChildItem -LiteralPath $src -Force | Where-Object { $_.Name -ne '.git' } | ForEach-Object {
   Copy-Item -LiteralPath $_.FullName -Destination $stage -Recurse -Force
 }
+
+# رفع إصدار الأصول (?v=N) لكسر كاش المتصفح بعد كل نشر
+$idx = Join-Path $stage 'index.html'
+if (Test-Path -LiteralPath $idx) {
+  $html = Get-Content -LiteralPath $idx -Raw -Encoding UTF8
+  $m = [regex]::Match($html, '\?v=(\d+)')
+  $newV = if ($m.Success) { [int]$m.Groups[1].Value + 1 } else { 2 }
+  $html = [regex]::Replace($html, '\?v=\d+', "?v=$newV")
+  [System.IO.File]::WriteAllText($idx, $html, (New-Object System.Text.UTF8Encoding($false)))
+  Write-Host "✔ bumped asset version -> ?v=$newV"
+}
 Write-Host "✔ تم تجهيز مجلد النشر: $stage"
 
 # ---------- 3) إنشاء المستودع (إن لم يكن موجوداً) ----------
