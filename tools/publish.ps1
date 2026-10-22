@@ -45,15 +45,29 @@ Get-ChildItem -LiteralPath $src -Force | Where-Object { $_.Name -ne '.git' } | F
 }
 
 # رفع إصدار الأصول (?v=N) لكسر كاش المتصفح بعد كل نشر
-$idx = Join-Path $stage 'index.html'
-if (Test-Path -LiteralPath $idx) {
-  $html = Get-Content -LiteralPath $idx -Raw -Encoding UTF8
-  $m = [regex]::Match($html, '\?v=(\d+)')
-  $newV = if ($m.Success) { [int]$m.Groups[1].Value + 1 } else { 2 }
-  $html = [regex]::Replace($html, '\?v=\d+', "?v=$newV")
-  [System.IO.File]::WriteAllText($idx, $html, (New-Object System.Text.UTF8Encoding($false)))
-  Write-Host "✔ bumped asset version -> ?v=$newV"
+$verFile = Join-Path $src 'version.txt'
+$curVer = 1
+if (Test-Path -LiteralPath $verFile) {
+  $raw = (Get-Content -LiteralPath $verFile -Raw).Trim()
+  if ($raw -match '\d+') { $curVer = [int]$Matches[0] }
+} else {
+  $m0 = [regex]::Match((Get-Content -LiteralPath (Join-Path $src 'index.html') -Raw), '\?v=(\d+)')
+  if ($m0.Success) { $curVer = [int]$m0.Groups[1].Value }
 }
+$newV = $curVer + 1
+
+foreach ($file in @((Join-Path $src 'index.html'), (Join-Path $stage 'index.html'))) {
+  if (-not (Test-Path -LiteralPath $file)) { continue }
+  $html = Get-Content -LiteralPath $file -Raw -Encoding UTF8
+  if ($html -match '\?v=\d+') {
+    $html = [regex]::Replace($html, '\?v=\d+', "?v=$newV")
+  } else {
+    $html = [regex]::Replace($html, '(\.(css|js))("|\?)', '$1?v=' + $newV + '$2')
+  }
+  [System.IO.File]::WriteAllText($file, $html, (New-Object System.Text.UTF8Encoding($false)))
+}
+[System.IO.File]::WriteAllText($verFile, "$newV", (New-Object System.Text.UTF8Encoding($false)))
+Write-Host "OK asset version -> ?v=$newV"
 Write-Host "✔ تم تجهيز مجلد النشر: $stage"
 
 # ---------- 3) إنشاء المستودع (إن لم يكن موجوداً) ----------
