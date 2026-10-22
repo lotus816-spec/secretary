@@ -65,7 +65,33 @@
 - بدون تجديد تلقائي تتحوّل الخطة إلى **منتهية** مع رسالة تنبيه.
 - **مخطط زمني** (Canvas) يوضّح الأيام المتبقية لكل خطة + قائمة «تحتاج تجديداً قريباً» + نهايات الشهر.
 
-### 7. الحقول المخصصة (ب حسب الاحتياج)
+### 7. الأرشفة وسلة المحذوفات (استرجاع المحذوف)
+- **أرشفة**: زر «أرشفة» لكل مهمة/خطة/ملاحظة + زر **«أرشفة المهام المكتملة»** لإخفاء ما أنجزته دون فقده.
+- **الحذف becomes reversible**: أي حذف ينقل العنصر إلى **سلة المحذوفات** وليس حذفاً نهائياً،
+  مع زر **«تراجع»** في التنبيه نفسه، وزر **«استرجاع»** داخل السلة.
+- تبويب **«الأرشيف والسلة»** في القائمة الجانبية يجمع:
+  - *المؤرشفة*: إلغاء الأرشفة أو نقلها إلى السلة.
+  - *سلة المحذوفات*: استرجاع أو **حذف نهائي**، مع زر **«إفراغ السلة»**.
+- عدّاد على أيقونة القائمة يوضّح عدد العناصر المؤرشفة والمحذوفة.
+
+### 8. التذكير عبر واتساب
+- من **الإعدادات ← التذكير عبر واتساب**: رقمك، ومدة التذكير (الافتراضي **30 دقيقة** قبل الموعد).
+- ثلاث طرق للإرسال:
+  | الطريقة | المتطلبات | ملاحظة |
+  |---|---|---|
+  | **رابط محادثة** | لا شيء | زر «فتح واتساب» برسالة جاهزة (المتصفح يمنع الفتح التلقائي) |
+  | **CallMeBot** | مفتاح من callmebot.com + رسالة `/allow` مرة واحدة | إرسال **تلقائي** من رقمك |
+  | **Meta Cloud API** | حساب Meta Business + Phone Number ID + Access Token | إرسال تلقائي (يحتاج قوالب خارج نافذة 24 ساعة) |
+- الرسالة تُرسل تلقائياً قبل الموعد بـ 30 دقيقة، وتحتوي العنوان والتاريخ والوقت والنوع.
+
+### 9. الربط بقاعدة بيانات Supabase
+- من **الإعدادات ← الربط بقاعدة بيانات Supabase**: أدخل **Project URL** و **anon public key** واختبر الاتصال.
+- عندها تتنقل المصادقة إلى **Supabase Auth**، وتُزامَن المهام والخطط والملاحظات والإعدادات
+  تلقائياً مع **PostgREST** (مع بقاء نسخة محلية فورية للعمل دون اتصال).
+- **عزل كامل**: سياسات **RLS** (`auth.uid() = user_id`) تحصر كل مستخدم في صفوفه.
+- ملف **`supabase/schema.sql`** جاهز: أنشئ الجداول والسياسات و `trigger` تحديث الوقت في SQL Editor.
+
+### 10. الحقول المخصصة (حسب الاحتياج)
 - من **الإعدادات ← الحقول المخصصة** تعرّف أي حقل تحتاجه: `نص` / `رقم` / `تاريخ` / `وقت` /
   `اختيار من قائمة` / `نعم–لا`، مع خيار **«حقل مطلوب»** وكتابة خيارات القائمة.
 - الحقول تظهر تلقائياً في **نموذج المهمة**، وتُحفظ قيمها لكل مهمة على حدة.
@@ -73,10 +99,10 @@
 - **تصفية** المهام حسب قيمة أي حقل من قائمة منسدلة في شريط الأدوات.
 - تعديل اسم/نوع الحقل أو حذفه (يُحذف وقيمه من كل المهام) بسطر واحد.
 
-### 8. الملاحظات الخاصة
+### 11. الملاحظات الخاصة
 لوحة ملاحظات ملوّنة مع تثبيت، تعديل، حذف، وقراءة صوتية لكل ملاحظة أو للملاحظات كلها.
 
-### 9. التصميم والتنقّل
+### 12. التصميم والتنقّل
 - واجهة على نمط **شركات عالمية**: شبكة، بطاقة، أزرق مؤسسي، حواف دائرية، ظلال ناعمة، تباين عالٍ.
 - **RTL أصيل**: `dir="rtl"` + خصائص CSS منطقية (`inset-inline`, `margin-inline`) تعمل بالانعكاس تلقائياً.
 - **القائمة الجانبية**: تُطوى إلى أيقونات فقط على الشاشات الكبيرة (تُحفظ الحالة)، وتُفتح كقائمة منسدلة
@@ -95,15 +121,19 @@ secretary/
 ├─ sw.js                   # Service Worker للعمل دون اتصال
 ├─ css/styles.css          # نظام التصميم الكامل (متغيّرات CSS + RTL)
 ├─ js/
-│  ├─ store.js             # التخزين + المصادقة + عزل البيانات + التجزئة
+│  ├─ store.js             # التخزين + المصادقة + عزل البيانات + التجزئة + الأرشفة
+│  ├─ sb.js                # عميل Supabase (GoTrue Auth + PostgREST) بدون SDK
+│  ├─ notify.js            # قنوات الإرسال: واتساب (رابط / CallMeBot / Meta Cloud)
 │  ├─ voice.js             # محرك النطق العربي + تحويل الأرقام/التواريخ
 │  ├─ charts.js            # رسوم بيانية على Canvas (أعمدة، أشرطة، دونات، مساحات)
 │  ├─ ui.js                # مكتبة الواجهة: إشعارات، نوافذ، تنسيقات
 │  └─ app.js               # منطق التطبيق: الشاشات، المحرك، التذكيرات
 ├─ icons/                  # أيقونات PWA
+├─ supabase/schema.sql     # جداول Supabase + سياسات RLS الجاهزة
 └─ tools/
    ├─ make-icons.ps1       # توليد أيقونات PNG
-   └─ serve.ps1            # خادم ملفات محلي للتجربة
+   ├─ serve.ps1            # خادم ملفات محلي للتجربة
+   └─ publish.ps1          # النشر على GitHub + تفعيل GitHub Pages
 ```
 
 ## نموذج البيانات (localStorage)
@@ -113,12 +143,15 @@ secretary:v1:users   → { "<userId>": { id, name, email, salt, hash, createdAt 
 secretary:v1:session → { userId, ts, remember }
 secretary:v1:u:<uid> → { ownerId, tasks[], plans[], notes[], messages[], settings{} }
 secretary:v1:theme   → "light" | "dark"
+secretary:v1:sb      → { url, key }              # إعداد Supabase
+secretary:v1:sb_session → { access_token, user } # جلسة Supabase
 ```
 
-- `task` : `{ id, title, notes, date, time, duration, category, priority, status, reminder, repeat, remindedAt, fields{} }`
-- `plan` : `{ id, title, category, startDate, expiryDate, cycle, autoRenew, cost, note, status, history[] }`
-- `note` : `{ id, title, text, color, pinned, createdAt, updatedAt }`
+- `task` : `{ id, title, notes, date, time, duration, category, priority, status, reminder, repeat, remindedAt, whatsappSentAt, archived, archivedAt, deletedAt, fields{} }`
+- `plan` : `{ id, title, category, startDate, expiryDate, cycle, autoRenew, cost, note, status, history[], archived, deletedAt }`
+- `note` : `{ id, title, text, color, pinned, createdAt, updatedAt, archived, deletedAt }`
 - `settings.customFields` : `[{ id, name, type, options[], required }]` — تعريف الحقول المخصصة لكل مستخدم.
+- `settings.whatsapp` : `{ enabled, phone, provider, lead, apikey, phoneNumberId, accessToken }`.
 
 ## ملاحظة أمنية مهمة
 

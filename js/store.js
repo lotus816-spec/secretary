@@ -118,11 +118,66 @@
         digest: true,
         autoLock: true,
         sound: true,
-        customFields: []
+        customFields: [],
+        whatsapp: {
+          enabled: false,
+          phone: '',
+          provider: 'link',
+          lead: 30,
+          apikey: '',
+          phoneNumberId: '',
+          accessToken: ''
+        }
       }
     };
   }
   function defaultSettings() { return defaultData('x').settings; }
+
+  /* ---------------- Supabase sync ---------------- */
+  function supabaseMode() { return !!(global.SB && global.SB.configured()); }
+  function syncPull() {
+    if (!supabaseMode() || !SB.session()) return Promise.resolve(false);
+    var uid = SB.userId();
+    return SB.select('secretary_items', 'user_id=eq.' + uid + '&select=kind,id,data')
+      .then(function (rows) {
+        var t = [], p = [], n = [];
+        (rows || []).forEach(function (r) {
+          var d = r.data || {};
+          if (r.kind === 'task') t.push(d);
+          else if (r.kind === 'plan') p.push(d);
+          else if (r.kind === 'note') n.push(d);
+          else if (r.kind === 'settings') { /* handled below */ }
+        });
+        if (!data) data = defaultData(uid);
+        data.tasks = t; data.plans = p; data.notes = n;
+        saveData();
+        emit('data', data);
+        return true;
+      })
+      .catch(function (err) {
+        console.warn('sync pull failed', err);
+        return false;
+      });
+  }
+  function syncPush(kind, row) {
+    if (!supabaseMode() || !SB.session() || !row) return;
+    SB.upsert('secretary_items', {
+      id: row.id, user_id: SB.userId(), kind: kind,
+      data: row, updated_at: new Date().toISOString()
+    }).catch(function (err) { console.warn('sync push failed', err); });
+  }
+  function syncRemove(kind, id) {
+    if (!supabaseMode() || !SB.session() || !id) return;
+    SB.remove('secretary_items', 'user_id=eq.' + SB.userId() + '&id=eq.' + encodeURIComponent(id))
+      .catch(function (err) { console.warn('sync remove failed', err); });
+  }
+  function syncSettings() {
+    if (!supabaseMode() || !SB.session() || !data) return;
+    SB.upsert('secretary_items', {
+      id: 'settings', user_id: SB.userId(), kind: 'settings',
+      data: data.settings, updated_at: new Date().toISOString()
+    }).catch(function (err) { console.warn('sync settings failed', err); });
+  }
 
   /* ---------------- user CRUD ---------------- */
   function findUserByEmail(email) {
@@ -140,7 +195,20 @@
     if (!name) return Promise.reject(new Error('الرجاء إدخال الاسم.'));
     if (!emailValid(email)) return Promise.reject(new Error('صيغة البريد الإلكتروني غير صحيحة.'));
     if (password.length < 6) return Promise.reject(new Error('كلمة المرور يجب ألا تقل عن 6 أحرف.'));
-    if (findUserByEmail(email)) return Promise.reject(new Error('هذا البريد مسجّل بالفعل. سجّل الدخول بدلاً من ذلك.'));
+
+    if (supabaseMode()) {
+      return SB.signUp(email, password, name).then(function (r) {
+        if (r.needsConfirmation) {
+          throw new Error('تم إنشاء الحساب — تحقّق من بريدك الإلكتروني ثم سجّل الدخول.');
+        }
+        return SB.signIn(email, password).then(function (sess) {
+          var s = { userId: sess.user.id, ts: Date.now(), remember: true, sb: true };
+          writeJSON(K_SESSION, s); session = s;
+          loadData();
+          return syncPull().then(function () { return currentUser(); });
+        });
+      });
+    }
 
     var salt = makeSalt();
     return hashPassword(password, salt).then(function (hash) {
@@ -153,7 +221,16 @@
   }
 
   function login(email, password, remember) {
-    var user = findUserByEmail(email);
+    var e = normEmail(email);
+    if (supabaseMode()) {
+      return SB.signIn(e, String(password || '')).then(function (sess) {
+        var s = { userId: sess.user.id, ts: Date.now(), remember: remember !== false, sb: true };
+        writeJSON(K_SESSION, s); session = s;
+        loadData();
+        return syncPull().then(function () { return currentUser(); });
+      });
+    }
+    var user = findUserByEmail(e);
     if (!user) return Promise.reject(new Error('لا يوجد حساب بهذا البريد الإلكتروني.'));
     return hashPassword(String(password || ''), user.salt).then(function (hash) {
       if (hash !== user.hash) return Promise.reject(new Error('كلمة المرور غير صحيحة.'));
@@ -165,12 +242,24 @@
   }
 
   function logout() {
+    if (supabaseMode() && SB.session()) {
+      SB.signOut();
+    }
     try { localStorage.removeItem(K_SESSION); } catch (e) { /* ignore */ }
     session = null;
     data = null;
   }
 
   function currentUser() {
+    if (supabaseMode() && SB.session()) {
+      var su = SB.session().user || {};
+      return {
+        id: su.id,
+        name: (su.user_metadata && su.user_metadata.name) || su.email || 'مستخدم',
+        email: su.email || '',
+        supabase: true
+      };
+    }
     var s = loadSession();
     if (!s || !s.userId) return null;
     var all = loadUsers();
@@ -215,22 +304,27 @@
     var t = Object.assign({
       id: uid('t'), title: '', notes: '', date: todayISO(), time: '', duration: 30,
       category: 'personal', priority: 'med', status: 'todo', reminder: true,
-      repeat: 'none', createdAt: Date.now(), doneAt: null, remindedAt: null, tags: []
+      repeat: 'none', createdAt: Date.now(), doneAt: null, remindedAt: null,
+      whatsappSentAt: null, archived: false, archivedAt: null, deletedAt: null, tags: []
     }, task || {});
     patch(function (d) { d.tasks.push(t); });
+    syncPush('task', t);
     return t;
   }
   function updateTask(id, changes) {
+    var updated = null;
     patch(function (d) {
       for (var i = 0; i < d.tasks.length; i++) {
-        if (d.tasks[i].id === id) { d.tasks[i] = Object.assign({}, d.tasks[i], changes); return; }
+        if (d.tasks[i].id === id) { d.tasks[i] = Object.assign({}, d.tasks[i], changes); updated = d.tasks[i]; return; }
       }
     });
+    if (updated) syncPush('task', updated);
   }
   function removeTask(id) {
     patch(function (d) {
       d.tasks = d.tasks.filter(function (t) { return t.id !== id; });
     });
+    syncRemove('task', id);
   }
   function getTask(id) {
     if (!data) return null;
@@ -243,42 +337,53 @@
     var p = Object.assign({
       id: uid('p'), title: '', category: 'work', startDate: todayISO(), expiryDate: todayISO(),
       cycle: 'monthly', autoRenew: true, cost: 0, note: '', status: 'active',
-      lastRenewedAt: null, createdAt: Date.now(), history: []
+      lastRenewedAt: null, createdAt: Date.now(), history: [],
+      archived: false, archivedAt: null, deletedAt: null
     }, plan || {});
     patch(function (d) { d.plans.push(p); });
+    syncPush('plan', p);
     return p;
   }
   function updatePlan(id, changes) {
+    var updated = null;
     patch(function (d) {
       for (var i = 0; i < d.plans.length; i++) {
-        if (d.plans[i].id === id) { d.plans[i] = Object.assign({}, d.plans[i], changes); return; }
+        if (d.plans[i].id === id) { d.plans[i] = Object.assign({}, d.plans[i], changes); updated = d.plans[i]; return; }
       }
     });
+    if (updated) syncPush('plan', updated);
   }
   function removePlan(id) {
     patch(function (d) { d.plans = d.plans.filter(function (p) { return p.id !== id; }); });
+    syncRemove('plan', id);
   }
 
   /* ---------------- note helpers ---------------- */
   function addNote(note) {
     var n = Object.assign({
-      id: uid('n'), title: '', text: '', color: '#1d4ed8', pinned: false, createdAt: Date.now(), updatedAt: Date.now()
+      id: uid('n'), title: '', text: '', color: '#1d4ed8', pinned: false, createdAt: Date.now(), updatedAt: Date.now(),
+      archived: false, archivedAt: null, deletedAt: null
     }, note || {});
     patch(function (d) { d.notes.unshift(n); });
+    syncPush('note', n);
     return n;
   }
   function updateNote(id, changes) {
+    var updated = null;
     patch(function (d) {
       for (var i = 0; i < d.notes.length; i++) {
         if (d.notes[i].id === id) {
           d.notes[i] = Object.assign({}, d.notes[i], changes, { updatedAt: Date.now() });
+          updated = d.notes[i];
           return;
         }
       }
     });
+    if (updated) syncPush('note', updated);
   }
   function removeNote(id) {
     patch(function (d) { d.notes = d.notes.filter(function (n) { return n.id !== id; }); });
+    syncRemove('note', id);
   }
 
   /* ---------------- messages ---------------- */
@@ -308,6 +413,7 @@
   }
   function setSetting(key, value) {
     patch(function (d) { d.settings[key] = value; });
+    syncSettings();
   }
 
   /* ---------------- backup ---------------- */
@@ -377,6 +483,67 @@
     return Math.round((b - a) / 86400000);
   }
 
+  /* ---------------- generic archive / trash ---------------- */
+  function kindOf(collection) {
+    return collection === 'tasks' ? 'task' : collection === 'plans' ? 'plan' : 'note';
+  }
+  function mutate(collection, id, fn) {
+    var updated = null;
+    patch(function (d) {
+      var list = d[collection] || [];
+      for (var i = 0; i < list.length; i++) {
+        if (list[i].id === id) { fn(list[i]); updated = list[i]; return; }
+      }
+    });
+    if (updated) syncPush(kindOf(collection), updated);
+  }
+  function drop(collection, id) {
+    patch(function (d) {
+      d[collection] = (d[collection] || []).filter(function (x) { return x.id !== id; });
+    });
+    syncRemove(kindOf(collection), id);
+  }
+  function archiveItem(kind, id) {
+    mutate(kind, id, function (it) { it.archived = true; it.archivedAt = Date.now(); it.deletedAt = null; });
+  }
+  function unarchiveItem(kind, id) {
+    mutate(kind, id, function (it) { it.archived = false; it.archivedAt = null; });
+  }
+  function trashItem(kind, id) {
+    mutate(kind, id, function (it) { it.deletedAt = Date.now(); it.archived = false; });
+  }
+  function restoreItem(kind, id) {
+    mutate(kind, id, function (it) { it.deletedAt = null; });
+  }
+  function purgeItem(kind, id) {
+    drop(kind, id);
+  }
+  function emptyTrash() {
+    patch(function (d) {
+      ['tasks', 'plans', 'notes'].forEach(function (c) {
+        d[c] = (d[c] || []).filter(function (x) { return !x.deletedAt; });
+      });
+    });
+  }
+  function purgeAllArchived() {
+    patch(function (d) {
+      ['tasks', 'plans', 'notes'].forEach(function (c) {
+        d[c] = (d[c] || []).filter(function (x) { return !x.archived; });
+      });
+    });
+  }
+  function archiveStats() {
+    var d = data || {};
+    var r = { archived: 0, trashed: 0, byType: { task: 0, plan: 0, note: 0 } };
+    ['tasks', 'plans', 'notes'].forEach(function (c) {
+      (d[c] || []).forEach(function (x) {
+        if (x.deletedAt) { r.trashed++; r.byType[c === 'tasks' ? 'task' : c === 'plans' ? 'plan' : 'note']++; }
+        else if (x.archived) { r.archived++; r.byType[c === 'tasks' ? 'task' : c === 'plans' ? 'plan' : 'note']++; }
+      });
+    });
+    return r;
+  }
+
   /* ---------------- export ---------------- */
   global.Store = {
     NS: NS,
@@ -398,6 +565,10 @@
     getSettings: getSettings, setSetting: setSetting,
     exportData: exportData, importData: importData,
     wipeMyData: wipeMyData, wipeAllUsers: wipeAllUsers,
+    supabaseMode: supabaseMode, syncPull: syncPull, syncPush: syncPush, syncRemove: syncRemove, syncSettings: syncSettings,
+    archiveItem: archiveItem, unarchiveItem: unarchiveItem,
+    trashItem: trashItem, restoreItem: restoreItem, purgeItem: purgeItem,
+    emptyTrash: emptyTrash, purgeAllArchived: purgeAllArchived, archiveStats: archiveStats,
     todayISO: todayISO, parseISO: parseISO, addDays: addDays, daysBetween: daysBetween,
     uid: uid, normEmail: normEmail, emailValid: emailValid, hashPassword: hashPassword
   };

@@ -1,7 +1,7 @@
 /* سكرتاري | Secretary — Service Worker
    Offline-first: يخدم ملفات التطبيق من الكاش عند انقطاع الاتصال.
    ملفات المستخدم (localStorage) لا تُمسّ أبداً. */
-const VERSION = 'secretary-v2';
+const VERSION = 'secretary-v3';
 const CORE = [
   './',
   './index.html',

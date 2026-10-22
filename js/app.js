@@ -22,6 +22,7 @@
     taskSort: 'date',
     taskField: '',
     notesCat: 'all',
+    archiveTab: 'archived',
     reminderTimer: null,
     idleTimer: null,
     lastActivity: Date.now(),
@@ -36,6 +37,7 @@
     tasks: { title: 'كل المهام', sub: 'قائمة شاملة قابلة للفلترة', icon: 'tasks' },
     plans: { title: 'الخطط والتجديد', sub: 'متابعة الخطط وتواريخ الانتهاء', icon: 'plans' },
     notes: { title: 'الملاحظات', sub: 'سجلاتك الخاصة', icon: 'notes' },
+    archive: { title: 'الأرشيف والسلة', sub: 'استرجع ما حذفته أو أرشفته', icon: 'archive' },
     settings: { title: 'الإعدادات', sub: 'اضبط التطبيق حسب احتياجك', icon: 'settings' }
   };
 
@@ -44,9 +46,16 @@
      ========================================================== */
   function D() { return Store.data || Store.loadData(); }
   function settings() { return Store.getSettings(); }
-  function tasks() { return (D() && D().tasks) || []; }
-  function plans() { return (D() && D().plans) || []; }
-  function notes() { return (D() && D().notes) || []; }
+  /* القوائم النشطة فقط (المحذوفة والمؤرشفة مستبعدة) */
+  function active(list) {
+    return (list || []).filter(function (x) { return !x.deletedAt && !x.archived; });
+  }
+  function tasks() { return active((D() && D().tasks) || []); }
+  function plans() { return active((D() && D().plans) || []); }
+  function notes() { return active((D() && D().notes) || []); }
+  function tasksAll() { return (D() && D().tasks) || []; }
+  function plansAll() { return (D() && D().plans) || []; }
+  function notesAll() { return (D() && D().notes) || []; }
   function messages() { return (D() && D().messages) || []; }
   function today() { return Store.todayISO(); }
 
@@ -248,6 +257,7 @@
     renderTasks();
     renderPlans();
     renderNotes();
+    renderArchive();
     renderSettings();
     renderBadges();
   }
@@ -260,6 +270,7 @@
       case 'tasks': renderTasks(); break;
       case 'plans': renderPlans(); break;
       case 'notes': renderNotes(); break;
+      case 'archive': renderArchive(); break;
       case 'settings': renderSettings(); break;
     }
     renderBadges();
@@ -280,6 +291,10 @@
 
     var unread = messages().filter(function (m) { return !m.read; }).length;
     $('#bellDot').hidden = !unread;
+
+    var ast = Store.archiveStats();
+    var archCount = ast.archived + ast.trashed;
+    $('#navBadgeArchive').textContent = archCount ? archCount : '';
   }
 
   /* ---------------- dashboard ---------------- */
@@ -447,6 +462,7 @@
         '</div></div>' +
         '<div class="tlRow__acts">' +
         '<button class="iconBtn" data-speak="' + t.id + '" title="اقرأ بصوت">' + UI.icon('speak') + '</button>' +
+        '<button class="iconBtn" data-archive-task="' + t.id + '" title="أرشفة">' + UI.icon('archive') + '</button>' +
         '<button class="iconBtn" data-edit="' + t.id + '" title="تعديل">' + UI.icon('edit') + '</button>' +
         '<button class="iconBtn" data-del="' + t.id + '" title="حذف">' + UI.icon('trash') + '</button>' +
         '</div></div></div>';
@@ -685,6 +701,7 @@
         '<div class="planCard__acts">' +
         '<button class="btn btn--soft btn--sm" data-renew="' + p.id + '">' + UI.icon('repeat') + 'جدّد</button>' +
         '<button class="iconBtn" data-speak-plan="' + p.id + '" title="اقرأ">' + UI.icon('speak') + '</button>' +
+        '<button class="iconBtn" data-archive-plan="' + p.id + '" title="أرشفة">' + UI.icon('archive') + '</button>' +
         '<button class="iconBtn" data-edit-plan="' + p.id + '" title="تعديل">' + UI.icon('edit') + '</button>' +
         '<button class="iconBtn" data-del-plan="' + p.id + '" title="حذف">' + UI.icon('trash') + '</button>' +
         '</div></div>' +
@@ -713,6 +730,7 @@
         '<div class="rowActions">' +
         '<button class="iconBtn" data-speak-note="' + n.id + '" title="اقرأ بصوت">' + UI.icon('speak') + '</button>' +
         '<button class="iconBtn" data-pin-note="' + n.id + '" title="تثبيت">' + UI.icon('flag') + '</button>' +
+        '<button class="iconBtn" data-archive-note="' + n.id + '" title="أرشفة">' + UI.icon('archive') + '</button>' +
         '<button class="iconBtn" data-edit-note="' + n.id + '" title="تعديل">' + UI.icon('edit') + '</button>' +
         '<button class="iconBtn" data-del-note="' + n.id + '" title="حذف">' + UI.icon('trash') + '</button>' +
         '</div></div></div>';
@@ -761,6 +779,8 @@
 
     renderCustomFields();
     renderFieldFilter();
+    renderWhatsAppSettings();
+    renderSupabaseSettings();
   }
 
   /* قائمة تصفية المهام حسب الحقول المخصصة */
@@ -1269,35 +1289,33 @@
   function deleteTask(id) {
     var t = Store.getTask(id); if (!t) return;
     UI.confirm({
-      title: 'حذف المهمة', text: 'هل تريد حذف «' + t.title + '» نهائياً؟',
-      confirmLabel: 'حذف', danger: true
+      title: 'حذف المهمة', text: 'سيُنقل «' + t.title + '» إلى سلة المحذوفات ويمكنك استرجاعه لاحقاً.',
+      confirmLabel: 'نقل إلى السلة'
     }).then(function (ok) {
       if (!ok) return;
-      Store.removeTask(id);
-      renderAll();
-      UI.toast({ type: 'ok', title: 'تم الحذف' });
+      doTrash('task', id, t.title);
     });
   }
 
   function deletePlan(id) {
-    var p = plans().filter(function (x) { return x.id === id; })[0]; if (!p) return;
+    var p = plansAll().filter(function (x) { return x.id === id; })[0]; if (!p) return;
     UI.confirm({
-      title: 'حذف الخطة', text: 'هل تريد حذف «' + p.title + '»؟', confirmLabel: 'حذف', danger: true
+      title: 'حذف الخطة', text: 'سيُنقل «' + p.title + '» إلى سلة المحذوفات ويمكنك استرجاعه لاحقاً.',
+      confirmLabel: 'نقل إلى السلة'
     }).then(function (ok) {
       if (!ok) return;
-      Store.removePlan(id); renderAll();
-      UI.toast({ type: 'ok', title: 'تم حذف الخطة' });
+      doTrash('plan', id, p.title);
     });
   }
 
   function deleteNote(id) {
-    var n = notes().filter(function (x) { return x.id === id; })[0]; if (!n) return;
+    var n = notesAll().filter(function (x) { return x.id === id; })[0]; if (!n) return;
     UI.confirm({
-      title: 'حذف الملاحظة', text: 'هل تريد حذف «' + (n.title || 'ملاحظة') + '»؟', confirmLabel: 'حذف', danger: true
+      title: 'حذف الملاحظة', text: 'سيُنقل «' + (n.title || 'ملاحظة') + '» إلى سلة المحذوفات ويمكنك استرجاعه لاحقاً.',
+      confirmLabel: 'نقل إلى السلة'
     }).then(function (ok) {
       if (!ok) return;
-      Store.removeNote(id); renderAll();
-      UI.toast({ type: 'ok', title: 'تم الحذف' });
+      doTrash('note', id, n.title);
     });
   }
 
@@ -1392,6 +1410,46 @@
 
     processPlans();
     processDigest(nowMin, s);
+    processWhatsApp(nowMin);
+  }
+
+  /* ---------- تذكير واتساب ---------- */
+  function processWhatsApp(nowMin) {
+    var w = waConfig();
+    if (!w.enabled || !Notify.enabled()) return;
+    var lead = typeof w.lead === 'number' ? w.lead : 30;
+    tasks().forEach(function (t) {
+      if (t.status === 'done' || !t.reminder || !t.date || !t.time) return;
+      if (t.whatsappSentAt) return;
+      var p = t.time.split(':');
+      var atMin = parseInt(p[0], 10) * 60 + parseInt(p[1], 10);
+      var fireMin = atMin - lead;
+      if (nowMin < fireMin || nowMin > atMin + 5) return;
+      sendWhatsapp(t);
+    });
+  }
+
+  function sendWhatsapp(t) {
+    Store.updateTask(t.id, { whatsappSentAt: Date.now() });
+    var lines = ['⏰ *تذكير من سكرتاري*', '', '📌 ' + t.title];
+    if (t.date) lines.push('📅 ' + Voice.dateToArabic(t.date));
+    if (t.time) lines.push('🕘 ' + Voice.timeToArabic(t.time));
+    lines.push('🏷️ ' + (t.category === 'work' ? 'عمل' : 'شخصي'));
+    if (t.notes) lines.push('📝 ' + t.notes);
+    var text = lines.join('\n');
+
+    Notify.send(text).then(function (res) {
+      if (res && res.needTap) {
+        UI.toast({
+          type: 'info', title: 'تذكير واتساب جاهز', text: t.title, duration: 0,
+          actions: [{ label: 'فتح واتساب', onClick: function () { global.open(res.link, '_blank', 'noopener'); } }]
+        });
+      } else {
+        UI.toast({ type: 'ok', title: 'أُرسل تذكير واتساب', text: t.title });
+      }
+    }).catch(function (e) {
+      UI.toast({ type: 'err', title: 'تعذّر إرسال واتساب', text: e.message });
+    });
   }
 
   function fireReminder(t) {
@@ -1488,6 +1546,223 @@
   }
 
   /* ==========================================================
+     الأرشيف وسلة المحذوفات
+     ========================================================== */
+  function archiveEntries(mode) {
+    var out = [];
+    var groups = { task: tasksAll(), plan: plansAll(), note: notesAll() };
+    Object.keys(groups).forEach(function (kind) {
+      groups[kind].forEach(function (x) {
+        var isTrash = !!x.deletedAt;
+        if (mode === 'trash') { if (isTrash) out.push({ kind: kind, item: x }); }
+        else { if (!isTrash && x.archived) out.push({ kind: kind, item: x }); }
+      });
+    });
+    return out;
+  }
+
+  function archiveItemHTML(kind, x, mode) {
+    var typeLabel = kind === 'task' ? 'مهمة' : kind === 'plan' ? 'خطة' : 'ملاحظة';
+    var typeIcon = kind === 'task' ? 'tasks' : kind === 'plan' ? 'plans' : 'notes';
+    var meta = '';
+    if (kind === 'task') {
+      meta = UI.fmtDate(x.date, { year: false }) + (x.time ? ' · ' + x.time : '') +
+        ' · ' + (x.category === 'work' ? 'عمل' : 'شخصي') +
+        (x.status === 'done' ? ' · منجزة' : '');
+    } else if (kind === 'plan') {
+      meta = 'تنتهي في ' + UI.fmtDate(x.expiryDate) + ' · ' + cycleLabel(x.cycle);
+    } else {
+      meta = (x.text || '').slice(0, 70) + (x.text && x.text.length > 70 ? '…' : '');
+    }
+    var when = mode === 'trash'
+      ? 'حُذفت ' + UI.relTime(x.deletedAt)
+      : 'أُرشفت ' + UI.relTime(x.archivedAt || x.updatedAt || x.createdAt);
+
+    var acts = '';
+    if (mode === 'trash') {
+      acts = '<button class="btn btn--soft btn--sm" data-restore="' + kind + ':' + x.id + '">' +
+        UI.icon('restore') + 'استرجاع</button>' +
+        '<button class="iconBtn" data-purge="' + kind + ':' + x.id + '" title="حذف نهائي">' + UI.icon('trash') + '</button>';
+    } else {
+      acts = '<button class="btn btn--soft btn--sm" data-unarchive="' + kind + ':' + x.id + '">' +
+        UI.icon('restore') + 'إلغاء الأرشفة</button>' +
+        '<button class="iconBtn" data-trash="' + kind + ':' + x.id + '" title="نقل إلى سلة المحذوفات">' + UI.icon('trash') + '</button>';
+    }
+    return '<div class="arcItem">' +
+      '<div class="arcItem__ico arcItem__ico--' + kind + '">' + UI.icon(typeIcon) + '</div>' +
+      '<div class="arcItem__body">' +
+      '<div class="arcItem__title">' + esc(x.title || typeLabel) +
+      '<span class="chip">' + typeLabel + '</span></div>' +
+      '<div class="arcItem__meta">' + esc(meta) + ' · ' + when + '</div>' +
+      '</div>' +
+      '<div class="arcItem__acts">' + acts + '</div>' +
+      '</div>';
+  }
+
+  function renderArchive() {
+    var mode = state.archiveTab || 'archived';
+    var st = Store.archiveStats();
+    var list = archiveEntries(mode);
+
+    $('#archiveStats').innerHTML = [
+      { icon: 'archive', cls: '', label: 'عناصر مؤرشفة', value: st.archived },
+      { icon: 'trash', cls: 'stat__ico--rose', label: 'في سلة المحذوفات', value: st.trashed },
+      { icon: 'tasks', cls: 'stat__ico--teal', label: 'مهام محذوفة', value: st.byType.task },
+      { icon: 'plans', cls: 'stat__ico--violet', label: 'خطط محذوفة', value: st.byType.plan }
+    ].map(function (s) {
+      return '<div class="stat"><div class="stat__ico ' + s.cls + '">' + UI.icon(s.icon) + '</div>' +
+        '<div><div class="stat__val">' + s.value + '</div><div class="stat__label">' + s.label + '</div></div></div>';
+    }).join('');
+
+    $('#archiveListTitle').innerHTML = UI.icon(mode === 'trash' ? 'trash' : 'archive') +
+      '<span>' + (mode === 'trash' ? 'سلة المحذوفات' : 'المؤرشفة') + '</span>';
+
+    var el = $('#archiveList');
+    if (!list.length) {
+      el.innerHTML = '<div class="empty">' + UI.icon(mode === 'trash' ? 'trash' : 'archive') +
+        '<b>' + (mode === 'trash' ? 'سلة المحذوفات فارغة' : 'لا توجد عناصر مؤرشفة') + '</b>' +
+        '<span>' + (mode === 'trash' ? 'كل ما تحذفه يُحفظ هنا ويمكنك استرجاعه.' : 'أرشف المهام المنجزة لتنظيم قائمتك دون فقدانها.') + '</span></div>';
+      return;
+    }
+    el.innerHTML = list.map(function (e) { return archiveItemHTML(e.kind, e.item, mode); }).join('');
+  }
+
+  /* ---------------- إجراءات الأرشفة والسلة ---------------- */
+  var KIND_MAP = { task: 'tasks', plan: 'plans', note: 'notes' };
+
+  function doArchive(kind, id) {
+    Store.archiveItem(KIND_MAP[kind], id);
+    renderAll();
+    UI.toast({ type: 'ok', title: 'تمت الأرشفة', text: 'يمكنك استرجاعها من «الأرشيف والسلة».' });
+  }
+  function doUnarchive(kind, id) {
+    Store.unarchiveItem(KIND_MAP[kind], id);
+    renderAll();
+    UI.toast({ type: 'ok', title: 'تمت الإعادة للقائمة' });
+  }
+  function doTrash(kind, id, label) {
+    Store.trashItem(KIND_MAP[kind], id);
+    renderAll();
+    UI.toast({
+      type: 'ok', title: 'نُقل إلى سلة المحذوفات', text: label || '',
+      duration: 9000,
+      actions: [{
+        label: 'تراجع', onClick: function () {
+          Store.restoreItem(KIND_MAP[kind], id); renderAll();
+          UI.toast({ type: 'ok', title: 'تمت الاستعادة' });
+        }
+      }]
+    });
+  }
+  function doRestore(kind, id) {
+    Store.restoreItem(KIND_MAP[kind], id);
+    renderAll();
+    UI.toast({ type: 'ok', title: 'تمت الاستعادة', text: 'عاد العنصر إلى قائمتك.' });
+  }
+  function doPurge(kind, id, label) {
+    UI.confirm({
+      title: 'حذف نهائي', danger: true, confirmLabel: 'حذف نهائي',
+      text: 'سيُمحى «' + (label || 'العنصر') + '» نهائياً ولا يمكن استرجاعه. هل أنت متأكد؟'
+    }).then(function (ok) {
+      if (!ok) return;
+      Store.purgeItem(KIND_MAP[kind], id);
+      renderAll();
+      UI.toast({ type: 'ok', title: 'تم الحذف نهائياً' });
+    });
+  }
+  function archiveCompleted() {
+    var done = tasks().filter(function (t) { return t.status === 'done'; });
+    if (!done.length) {
+      UI.toast({ type: 'warn', title: 'لا توجد مهام مكتملة', text: 'أرشف المهام المنجزة أولاً ثم أعد المحاولة.' });
+      return;
+    }
+    UI.confirm({
+      title: 'أرشفة المهام المكتملة', confirmLabel: 'أرشفة',
+      text: 'سيتم أرشفة ' + done.length + ' مهمة منجزة. ستبقى محفوظة ويمكنك استرجاعها في أي وقت.'
+    }).then(function (ok) {
+      if (!ok) return;
+      done.forEach(function (t) { Store.archiveItem('tasks', t.id); });
+      renderAll();
+      UI.toast({ type: 'ok', title: 'تمت أرشفة ' + done.length + ' مهمة' });
+    });
+  }
+
+  /* ---------------- واتساب ---------------- */
+  function waConfig() {
+    var s = settings();
+    return s.whatsapp || (s.whatsapp = {
+      enabled: false, phone: '', provider: 'link', lead: 30, apikey: '', phoneNumberId: '', accessToken: ''
+    });
+  }
+  function applyNotifyConfig() {
+    var w = waConfig();
+    Notify.configure(w);
+  }
+
+  function renderWhatsAppSettings() {
+    var w = waConfig();
+    var en = $('#waEnabled'); if (!en) return;
+    en.checked = !!w.enabled;
+    $('#waPhone').value = w.phone || '';
+    $('#waLead').value = w.lead || 30;
+    $('#waLeadVal').textContent = w.lead || 30;
+    $('#waProvider').value = w.provider || 'link';
+    $('#waApiKey').value = w.apikey || '';
+    $('#waPhoneId').value = w.phoneNumberId || '';
+    $('#waToken').value = w.accessToken || '';
+    syncWaRows();
+    var hint = '';
+    if (w.provider === 'link') {
+      hint = 'عند موعد التذكير سيظهر لك زر «فتح واتساب» برسالة جاهزة — اضغطه لإرسالها (المتصفحات تمنع الفتح التلقائي).';
+    } else if (w.provider === 'callmebot') {
+      hint = 'للإعداد: افح callmebot.com/keys ثم أرسل /allow إلى الرقم 3464442148 من واتسابك، وضع المفتاح هنا. بعدها ستصل الرسائل تلقائياً.';
+    } else {
+      hint = 'يتطلب حساب Meta Business ورمز WhatsApp. إرسال الرسائل خارج نافذة الـ24 ساعة يحتاج قوالب معتمدة من Meta.';
+    }
+    $('#waHint').textContent = hint;
+  }
+  function syncWaRows() {
+    var p = $('#waProvider').value;
+    $('#waApiRow').hidden = p !== 'callmebot';
+    $('#waMetaRow').hidden = p !== 'meta';
+    $('#waTokenRow').hidden = p !== 'meta';
+  }
+  function saveWa() {
+    var w = waConfig();
+    w.enabled = $('#waEnabled').checked;
+    w.phone = $('#waPhone').value.trim();
+    w.lead = parseInt($('#waLead').value, 10) || 30;
+    w.provider = $('#waProvider').value;
+    w.apikey = $('#waApiKey').value.trim();
+    w.phoneNumberId = $('#waPhoneId').value.trim();
+    w.accessToken = $('#waToken').value.trim();
+    Store.setSetting('whatsapp', w);
+    applyNotifyConfig();
+  }
+
+  /* ---------------- Supabase ---------------- */
+  function renderSupabaseSettings() {
+    var cfg = (window.SB && SB.config) ? SB.config : { url: '', key: '' };
+    var url = $('#sbUrl'), key = $('#sbKey');
+    if (!url) return;
+    if (document.activeElement !== url) url.value = cfg.url || '';
+    if (document.activeElement !== key) key.value = cfg.key || '';
+    var on = !!(window.SB && SB.configured());
+    var chip = $('#sbChip');
+    chip.textContent = on ? 'مُفعّل' : 'محلي';
+    chip.className = 'chip ' + (on ? 'chip--ok' : '');
+    var st = $('#sbState');
+    if (on) {
+      var hasSession = !!(SB.session && SB.session());
+      st.textContent = hasSession
+        ? 'متصل بحساب ' + ((SB.session().user && SB.session().user.email) || '')
+        : 'الإعداد محفوظ — سجّل الدخول بحسابك في Supabase';
+    } else {
+      st.textContent = 'غير مفعّل — التطبيق يعمل محلياً على هذا الجهاز';
+    }
+  }
+
+  /* ==========================================================
      settings wiring
      ========================================================== */
   function applySettings() {
@@ -1497,6 +1772,7 @@
     Voice.setRate(s.rate);
     Voice.setPitch(s.pitch);
     Voice.setArabicNumbers(s.arabicNumbers);
+    applyNotifyConfig();
   }
 
   function applyTheme(theme, save) {
@@ -1574,6 +1850,7 @@
       err.hidden = true;
       if (pass !== pass2) { err.textContent = 'كلمتا المرور غير متطابقتين.'; err.hidden = false; return; }
       Store.register({ name: name, email: email, password: pass }).then(function (user) {
+        if (Store.supabaseMode()) return user;
         return Store.login(email, pass, true).then(function () { return user; });
       }).then(function (user) {
         $('#signupPassword').value = ''; $('#signupPassword2').value = '';
@@ -1719,6 +1996,92 @@
     /* custom fields */
     $('#addFieldBtn').addEventListener('click', function () { fieldModal(null); });
 
+    /* archive & trash */
+    $('#archiveTabs').addEventListener('click', function (e) {
+      var b = e.target.closest('.seg__btn'); if (!b) return;
+      $$('.seg__btn', $('#archiveTabs')).forEach(function (x) { x.classList.remove('is-active'); });
+      b.classList.add('is-active');
+      state.archiveTab = b.dataset.archiveTab;
+      renderArchive();
+    });
+    $('#archiveCompletedBtn').addEventListener('click', archiveCompleted);
+    $('#tasksArchiveDoneBtn').addEventListener('click', archiveCompleted);
+
+    /* whatsapp settings */
+    ['#waEnabled', '#waPhone', '#waLead', '#waProvider', '#waApiKey', '#waPhoneId', '#waToken'].forEach(function (sel) {
+      var el = $(sel);
+      if (!el) return;
+      var ev = (sel === '#waProvider') ? 'change' : (sel === '#waLead' ? 'input' : 'change');
+      el.addEventListener(ev, function () { saveWa(); });
+    });
+    $('#waProvider').addEventListener('change', syncWaRows);
+    $('#waTestBtn').addEventListener('click', function () {
+      saveWa();
+      var w = waConfig();
+      if (!Notify.validPhone(w.phone)) {
+        UI.toast({ type: 'err', title: 'رقم غير صحيح', text: 'أدخل رقم واتساب بالصيغة الدولية (مثال: 213555757258).' });
+        return;
+      }
+      Notify.test().then(function (res) {
+        if (res && res.needTap) {
+          UI.toast({
+            type: 'info', title: 'جاهزة للإرسال', text: 'اضغط «فتح واتساب» لإرسال الرسالة التجريبية.',
+            duration: 15000,
+            actions: [{ label: 'فتح واتساب', onClick: function () { global.open(res.link, '_blank', 'noopener'); } }]
+          });
+        } else {
+          UI.toast({ type: 'ok', title: 'أُرسلت الرسالة التجريبية', text: 'تحقق من محادثاتك على واتساب.' });
+        }
+      }).catch(function (e) {
+        UI.toast({ type: 'err', title: 'تعذّر الإرسال', text: e.message });
+      });
+    });
+
+    /* supabase settings */
+    $('#sbSaveBtn').addEventListener('click', function () {
+      var url = $('#sbUrl').value.trim();
+      var key = $('#sbKey').value.trim();
+      if (!url || !key) {
+        UI.toast({ type: 'err', title: 'بيانات ناقصة', text: 'أدخل Project URL ومفتاح anon.' });
+        return;
+      }
+      SB.configure(url, key);
+      renderSupabaseSettings();
+      SB.ping().then(function (r) {
+        if (r.ok) {
+          renderSupabaseSettings();
+          UI.toast({
+            type: 'ok', title: 'تم الربط بقاعدة البيانات',
+            text: 'سجّل خروجاً ثم ادخل بحساب Supabase لتفعيل المزامنة.'
+          });
+        } else {
+          UI.toast({ type: 'err', title: 'تعذّر الاتصال', text: r.error });
+        }
+      }).catch(function (e) {
+        UI.toast({ type: 'err', title: 'تعذّر الاتصال', text: e.message });
+      });
+    });
+    $('#sbSyncBtn').addEventListener('click', function () {
+      if (!SB.configured()) { UI.toast({ type: 'warn', title: 'الربط غير مفعّل' }); return; }
+      Store.syncPull().then(function (ok) {
+        renderAll();
+        UI.toast({ type: ok ? 'ok' : 'err', title: ok ? 'تمت المزامنة' : 'تعذّرت المزامنة' });
+      });
+    });
+    $('#emptyTrashBtn').addEventListener('click', function () {
+      var st = Store.archiveStats();
+      if (!st.trashed) { UI.toast({ type: 'warn', title: 'السلة فارغة' }); return; }
+      UI.confirm({
+        title: 'إفراغ سلة المحذوفات', danger: true, confirmLabel: 'حذف نهائي',
+        text: 'سيُحذف ' + st.trashed + ' عنصراً نهائياً ولا يمكن استرجاعها. هل أنت متأكد؟'
+      }).then(function (ok) {
+        if (!ok) return;
+        Store.emptyTrash();
+        renderAll();
+        UI.toast({ type: 'ok', title: 'تم إفراغ السلة' });
+      });
+    });
+
     /* settings */
     $('#setName').addEventListener('change', function () {
       var name = this.value.trim();
@@ -1839,7 +2202,7 @@
   }
 
   function onDelegated(e) {
-    var el = e.target.closest('[data-toggle],[data-edit],[data-del],[data-speak],[data-open-task],[data-open-plan],[data-renew],[data-speak-plan],[data-edit-plan],[data-del-plan],[data-speak-note],[data-pin-note],[data-edit-note],[data-del-note],[data-msg-read],[data-msg-done],[data-add-task],[data-day],[data-edit-field],[data-del-field]');
+    var el = e.target.closest('[data-toggle],[data-edit],[data-del],[data-speak],[data-open-task],[data-open-plan],[data-renew],[data-speak-plan],[data-edit-plan],[data-del-plan],[data-speak-note],[data-pin-note],[data-edit-note],[data-del-note],[data-msg-read],[data-msg-done],[data-add-task],[data-day],[data-edit-field],[data-del-field],[data-archive-task],[data-archive-plan],[data-archive-note],[data-unarchive],[data-trash],[data-restore],[data-purge]');
     if (!el) return;
 
     if (el.hasAttribute('data-add-task')) { taskModal(null); return; }
@@ -1872,6 +2235,33 @@
       return;
     }
     if (el.dataset.delField) { deleteField(el.dataset.delField); return; }
+    if (el.dataset.archiveTask) { doArchive('task', el.dataset.archiveTask); return; }
+    if (el.dataset.archivePlan) { doArchive('plan', el.dataset.archivePlan); return; }
+    if (el.dataset.archiveNote) { doArchive('note', el.dataset.archiveNote); return; }
+    if (el.dataset.unarchive) {
+      var up = el.dataset.unarchive.split(':');
+      doUnarchive(up[0], up[1]);
+      return;
+    }
+    if (el.dataset.trash) {
+      var tk = el.dataset.trash.split(':');
+      var tItem = (KIND_MAP[tk[0]] === 'tasks' ? tasksAll() : KIND_MAP[tk[0]] === 'plans' ? plansAll() : notesAll())
+        .filter(function (x) { return x.id === tk[1]; })[0];
+      doTrash(tk[0], tk[1], tItem ? tItem.title : '');
+      return;
+    }
+    if (el.dataset.restore) {
+      var rs = el.dataset.restore.split(':');
+      doRestore(rs[0], rs[1]);
+      return;
+    }
+    if (el.dataset.purge) {
+      var pg = el.dataset.purge.split(':');
+      var pItem = (KIND_MAP[pg[0]] === 'tasks' ? tasksAll() : KIND_MAP[pg[0]] === 'plans' ? plansAll() : notesAll())
+        .filter(function (x) { return x.id === pg[1]; })[0];
+      doPurge(pg[0], pg[1], pItem ? pItem.title : '');
+      return;
+    }
     if (el.dataset.day && !el.dataset.openTask) {
       var iso = el.dataset.day;
       state.dayOffset = Store.daysBetween(today(), iso);
