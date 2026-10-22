@@ -99,6 +99,14 @@
 
   <div class="auth__panel">
     <div class="auth__card">
+      <div class="auth__top">
+        <span class="brandmark__glyph" aria-hidden="true"><svg viewBox="0 0 24 24"><use href="#i-tasks"/></svg></span>
+        <div>
+          <h2>سكرتاري</h2>
+          <p>منظّم يومك وأسبوعك وشهرك</p>
+        </div>
+      </div>
+
       <div class="auth__tabs" role="tablist">
         <button class="auth__tab is-active" data-authtab="login" role="tab" aria-selected="true">تسجيل الدخول</button>
         <button class="auth__tab" data-authtab="signup" role="tab" aria-selected="false">حساب جديد</button>
@@ -123,11 +131,13 @@
         </div>
         <div class="auth__row">
           <label class="check"><input type="checkbox" id="loginRemember" checked><span>تذكرني على هذا الجهاز</span></label>
+          <button type="button" class="auth__link" id="forgotBtn">نسيت كلمة المرور؟</button>
         </div>
         <p class="formError" id="loginError" role="alert" hidden></p>
         <button class="btn btn--primary btn--block btn--lg" type="submit">
           <svg viewBox="0 0 24 24"><use href="#i-logout"/></svg><span>دخول</span>
         </button>
+        <p class="auth__note"><svg viewBox="0 0 24 24"><use href="#i-shield"/></svg> بياناتك مشفّرة على جهازك ولا تُرسل إلى أي خادم.</p>
       </form>
 
       <form class="auth__form" id="signupForm" novalidate hidden>
@@ -166,6 +176,7 @@
         <button class="btn btn--primary btn--block btn--lg" type="submit">
           <svg viewBox="0 0 24 24"><use href="#i-plus"/></svg><span>إنشاء الحساب</span>
         </button>
+        <p class="auth__note"><svg viewBox="0 0 24 24"><use href="#i-user"/></svg> كل مستخدم له مساحة بيانات منفصلة تماماً.</p>
       </form>
 
       <div class="auth__demo">
@@ -178,6 +189,28 @@
       </button>
       <p class="auth__demoHint">حساب تجريبي ببيانات نموذجية — يمكنك حذفه لاحقاً من الإعدادات.</p>
     </div>
+  </div>
+</div>
+
+<!-- ============ LOCK SCREEN ============ -->
+<div class="lockScreen" id="lockScreen" hidden>
+  <div class="lockCard">
+    <div class="lockCard__badge"><svg viewBox="0 0 24 24"><use href="#i-lock"/></svg></div>
+    <span class="avatar avatar--lg" id="lockAvatar">؟</span>
+    <h2 id="lockName">مرحباً</h2>
+    <p class="lockCard__email" id="lockEmail">—</p>
+    <div class="field">
+      <div class="field__ctrl">
+        <svg class="field__icon" viewBox="0 0 24 24"><use href="#i-lock"/></svg>
+        <input id="lockPassword" type="password" autocomplete="current-password" placeholder="كلمة المرور" aria-label="كلمة المرور">
+        <button type="button" class="field__toggle" id="lockToggle">إظهار</button>
+      </div>
+    </div>
+    <p class="formError" id="lockError" role="alert" hidden></p>
+    <button class="btn btn--primary btn--block btn--lg" id="lockUnlockBtn">
+      <svg viewBox="0 0 24 24"><use href="#i-lock"/></svg><span>فتح التطبيق</span>
+    </button>
+    <button class="btn btn--ghost btn--block" id="lockLogoutBtn">تسجيل الخروج بدلاً من ذلك</button>
   </div>
 </div>
 
@@ -243,6 +276,29 @@
           <svg viewBox="0 0 24 24"><use href="#i-bell"/></svg>
           <em class="dot" id="bellDot" hidden></em>
         </button>
+        <div class="userMenu" id="userMenuWrap">
+          <button class="userMenu__btn" id="userBtn" aria-haspopup="menu" aria-expanded="false" title="حسابي">
+            <span class="avatar avatar--sm" id="topAvatar">؟</span>
+            <svg class="userMenu__chev" viewBox="0 0 24 24"><use href="#i-chev-down"/></svg>
+          </button>
+          <div class="userMenu__drop" id="userMenu" role="menu" hidden>
+            <div class="userMenu__head">
+              <span class="avatar" id="menuAvatar">؟</span>
+              <div class="userMenu__id">
+                <strong id="menuName">—</strong>
+                <small id="menuEmail">—</small>
+              </div>
+            </div>
+            <div class="userMenu__meta" id="menuSession"></div>
+            <div class="userMenu__sep"></div>
+            <button class="userMenu__item" id="menuProfile" role="menuitem"><svg viewBox="0 0 24 24"><use href="#i-user"/></svg>الملف الشخصي</button>
+            <button class="userMenu__item" id="menuLock" role="menuitem"><svg viewBox="0 0 24 24"><use href="#i-lock"/></svg>قفل التطبيق</button>
+            <button class="userMenu__item" id="menuSettings" role="menuitem"><svg viewBox="0 0 24 24"><use href="#i-settings"/></svg>الإعدادات</button>
+            <div class="userMenu__sep"></div>
+            <button class="userMenu__item userMenu__item--danger" id="menuLogout" role="menuitem"><svg viewBox="0 0 24 24"><use href="#i-logout"/></svg>تسجيل الخروج</button>
+            <button class="userMenu__item userMenu__item--danger" id="menuLogoutAll" role="menuitem"><svg viewBox="0 0 24 24"><use href="#i-shield"/></svg>خروج من كل الأجهزة</button>
+          </div>
+        </div>
         <button class="btn btn--primary btn--sm" id="quickAddBtn"><svg viewBox="0 0 24 24"><use href="#i-plus"/></svg><span>مهمة جديدة</span></button>
       </div>
     </header>
@@ -760,8 +816,16 @@
           <div class="card">
             <div class="card__head"><h3><svg viewBox="0 0 24 24"><use href="#i-logout"/></svg> الجلسة</h3></div>
             <div class="setRow">
+              <div><strong>حالة الجلسة</strong><small id="sessionState">—</small></div>
+              <span class="chip chip--ok" id="sessionChip">نشط</span>
+            </div>
+            <div class="setRow">
               <div><strong>تسجيل الخروج</strong><small>تبقى بياناتك محفوظة على الجهاز</small></div>
               <button class="btn btn--soft btn--sm" id="logoutBtn"><svg viewBox="0 0 24 24"><use href="#i-logout"/></svg><span>خروج</span></button>
+            </div>
+            <div class="setRow">
+              <div><strong>قفل التطبيق</strong><small>شاشة قفل بكلمة المرور (أو تلقائياً عند عدم النشاط)</small></div>
+              <button class="btn btn--soft btn--sm" id="lockAppBtn"><svg viewBox="0 0 24 24"><use href="#i-lock"/></svg><span>قفل</span></button>
             </div>
             <div class="setRow">
               <div><strong>مسح بيانات المتصفح</strong><small>يحذف الحسابات المسجلة على هذا الجهاز</small></div>

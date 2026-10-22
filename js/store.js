@@ -43,7 +43,58 @@
     }
   }
   function loadUsers() { if (!users) users = readJSON(K_USERS, {}); return users; }
-  function loadSession() { if (!session) session = readJSON(K_SESSION, null); return session; }
+
+  /* ---------------- الجلسة ---------------- */
+  var SESSION_MAX_AGE = 30 * 24 * 60 * 60 * 1000;   // 30 يوماً عند اختيار «تذكرني»
+
+  function sessionGet() { try { return JSON.parse(sessionStorage.getItem(K_SESSION) || 'null'); } catch (e) { return null; } }
+  function sessionSet(v) {
+    try {
+      if (v) sessionStorage.setItem(K_SESSION, JSON.stringify(v));
+      else sessionStorage.removeItem(K_SESSION);
+    } catch (e) { /* ignore */ }
+  }
+  function loadSession() {
+    if (session) return session;
+    var s = readJSON(K_SESSION, null);          // جلسة دائمة (تذكّرني)
+    var persistent = true;
+    if (!s) { s = sessionGet(); persistent = false; }   // جلسة حتى إغلاق المتصفح
+    if (s) {
+      var age = Date.now() - (s.ts || 0);
+      if (s.remember && persistent && age > SESSION_MAX_AGE) {
+        s = null;                                // انتهت صلاحية الجلسة
+        try { localStorage.removeItem(K_SESSION); } catch (e) { }
+      }
+    }
+    session = s;
+    return session;
+  }
+  function saveSession(s) {
+    session = s;
+    try { localStorage.removeItem(K_SESSION); } catch (e) { }
+    sessionSet(null);
+    if (!s) return;
+    if (s.remember) {
+      try { localStorage.setItem(K_SESSION, JSON.stringify(s)); } catch (e) { }
+      sessionSet(null);
+    } else {
+      sessionSet(s);
+    }
+  }
+  function sessionInfo() {
+    var s = loadSession();
+    if (!s) return null;
+    var u = currentUser();
+    return {
+      userId: s.userId,
+      name: u ? u.name : '',
+      email: u ? u.email : '',
+      persistent: !!s.remember,
+      supabase: !!s.sb,
+      startedAt: s.ts || 0,
+      expiresAt: s.remember && s.ts ? s.ts + SESSION_MAX_AGE : null
+    };
+  }
 
   function uid(prefix) {
     return (prefix || 'id') + '_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
@@ -203,7 +254,7 @@
         }
         return SB.signIn(email, password).then(function (sess) {
           var s = { userId: sess.user.id, ts: Date.now(), remember: true, sb: true };
-          writeJSON(K_SESSION, s); session = s;
+          saveSession(s);
           loadData();
           return syncPull().then(function () { return currentUser(); });
         });
@@ -225,7 +276,7 @@
     if (supabaseMode()) {
       return SB.signIn(e, String(password || '')).then(function (sess) {
         var s = { userId: sess.user.id, ts: Date.now(), remember: remember !== false, sb: true };
-        writeJSON(K_SESSION, s); session = s;
+        saveSession(s);
         loadData();
         return syncPull().then(function () { return currentUser(); });
       });
@@ -235,8 +286,7 @@
     return hashPassword(String(password || ''), user.salt).then(function (hash) {
       if (hash !== user.hash) return Promise.reject(new Error('كلمة المرور غير صحيحة.'));
       var s = { userId: user.id, ts: Date.now(), remember: remember !== false };
-      writeJSON(K_SESSION, s);
-      session = s;
+      saveSession(s);
       return user;
     });
   }
@@ -245,7 +295,7 @@
     if (supabaseMode() && SB.session()) {
       SB.signOut();
     }
-    try { localStorage.removeItem(K_SESSION); } catch (e) { /* ignore */ }
+    saveSession(null);
     session = null;
     data = null;
   }
@@ -553,6 +603,8 @@
     login: login,
     logout: logout,
     currentUser: currentUser,
+    sessionInfo: sessionInfo,
+    saveSession: saveSession,
     findUserByEmail: findUserByEmail,
     loadData: loadData,
     saveData: saveData,

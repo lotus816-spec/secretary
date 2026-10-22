@@ -159,22 +159,22 @@
     }
   }
 
-  function showAuth(locked) {
+  function showAuth() {
     $('#authScreen').hidden = false;
     $('#appShell').hidden = true;
+    $('#lockScreen').hidden = true;
     document.body.classList.add('is-auth');
+    document.body.classList.remove('drawer-open');
+    switchAuthTab('login');
     var user = Store.currentUser();
     var emailField = $('#loginEmail');
-    if (locked && user) {
-      emailField.value = user.email;
-      emailField.disabled = true;
-      $('#loginPassword').focus();
-      switchAuthTab('login');
-    } else {
-      emailField.disabled = false;
-      switchAuthTab('login');
-    }
+    emailField.disabled = false;
+    emailField.value = (user && user.email) ? user.email : '';
+    $('#loginPassword').value = '';
+    $('#loginError').hidden = true;
+    setTimeout(function () { $('#loginPassword').focus(); }, 140);
   }
+
   function switchAuthTab(which) {
     $$('.auth__tab').forEach(function (b) {
       var on = b.dataset.authtab === which;
@@ -186,8 +186,135 @@
     var ink = $('.auth__tabs').querySelector('.auth__tabInk');
     if (ink) ink.style.insetInlineStart = which === 'signup' ? 'calc(50% + 1px)' : '5px';
   }
+
+  /* شاشة القفل: مصممة خصيصاً بدل إعادة استخدام نموذج الدخول */
+  function showLock() {
+    var user = Store.currentUser();
+    if (!user) { showAuth(); return; }
+    $('#authScreen').hidden = true;
+    $('#appShell').hidden = true;
+    $('#lockScreen').hidden = false;
+    document.body.classList.add('is-auth');
+    $('#lockName').textContent = 'مرحباً، ' + (String(user.name || '').split(' ')[0] || 'بك');
+    $('#lockEmail').textContent = user.email || '';
+    $('#lockAvatar').textContent = UI.initials(user.name);
+    $('#lockPassword').value = '';
+    $('#lockError').hidden = true;
+    setTimeout(function () { $('#lockPassword').focus(); }, 160);
+  }
+
+  function unlockApp() {
+    var pass = $('#lockPassword').value;
+    var user = Store.currentUser();
+    var err = $('#lockError');
+    err.hidden = true;
+    if (!user) { showAuth(); return; }
+    if (!pass) { err.textContent = 'أدخل كلمة المرور لفتح التطبيق.'; err.hidden = false; return; }
+    var info = Store.sessionInfo();
+    var remember = info ? info.persistent : true;
+    Store.login(user.email, pass, remember).then(function () {
+      $('#lockScreen').hidden = true;
+      $('#appShell').hidden = false;
+      document.body.classList.remove('is-auth');
+      state.locked = false;
+      Store.loadData();
+      applySettings();
+      renderAll();
+      resetIdle();
+      UI.toast({ type: 'ok', title: 'مرحباً بعودتك', text: 'تم فتح التطبيق.' });
+    }).catch(function (ex) {
+      err.textContent = ex.message || 'كلمة المرور غير صحيحة.';
+      err.hidden = false;
+      $('#lockPassword').value = '';
+      $('#lockPassword').focus();
+    });
+  }
+
+  /* تسجيل الخروج */
+  function logoutApp(opts) {
+    opts = opts || {};
+    Store.logout();
+    state.locked = false;
+    Voice.stop();
+    closeSidebar();
+    toggleUserMenu(false);
+    $('#loginEmail').value = '';
+    $('#loginEmail').disabled = false;
+    $('#loginPassword').value = '';
+    $('#lockScreen').hidden = true;
+    showAuth();
+    UI.toast({
+      type: 'ok', title: 'تم تسجيل الخروج',
+      text: opts.everywhere
+        ? 'انتهت جلستك. بياناتك تبقى محفوظة على الجهاز.'
+        : 'بياناتك تبقى محفوظة على هذا الجهاز.'
+    });
+  }
+
+  function logoutEverywhere() {
+    UI.confirm({
+      title: 'خروج من كل الأجهزة', danger: true, confirmLabel: 'تسجيل الخروج',
+      text: 'سيتم إنهاء جلستك على هذا الجهاز الآن. لتأمين بقية الجلسات غيّر كلمة المرور من الإعدادات.'
+    }).then(function (ok) {
+      if (!ok) return;
+      logoutApp({ everywhere: true });
+    });
+  }
+
+  /* نسيت كلمة المرور */
+  function forgotPassword() {
+    var email = $('#loginEmail').value.trim();
+    if (!email) {
+      UI.toast({ type: 'warn', title: 'أدخل بريدك الإلكتروني', text: 'اكتب البريد المسجّل ثم حاول مرة أخرى.' });
+      $('#loginEmail').focus();
+      return;
+    }
+    if (!Store.supabaseMode()) {
+      UI.confirm({
+        title: 'استعادة كلمة المرور',
+        confirmLabel: 'فهمت',
+        text: 'إرسال رابط استعادة عبر البريد يتطلّب ربط Supabase. أمّا الآن فبإمكانك تغيير كلمة المرور من الإعدادات بعد الدخول.'
+      });
+      return;
+    }
+    SB.resetPassword(email).then(function () {
+      UI.toast({ type: 'ok', title: 'أُرسل رابط الاستعادة', text: 'تحقّق من بريدك الإلكتروني ' + email });
+    }).catch(function (e) {
+      UI.toast({ type: 'err', title: 'تعذّر الإرسال', text: e.message });
+    });
+  }
+
+  /* قائمة الحساب */
+  function renderUserMenu() {
+    var user = Store.currentUser() || {};
+    var info = Store.sessionInfo() || {};
+    $('#menuName').textContent = user.name || '—';
+    $('#menuEmail').textContent = user.email || '—';
+    $('#menuAvatar').textContent = UI.initials(user.name);
+    $('#topAvatar').textContent = UI.initials(user.name);
+    var meta = [];
+    meta.push(info.supabase ? 'جلسة عبر Supabase' : 'جلسة محلية على هذا الجهاز');
+    if (info.persistent && info.expiresAt) {
+      var days = Math.max(0, Math.ceil((info.expiresAt - Date.now()) / 86400000));
+      meta.push(days > 0 ? ('تذكّرني — تنتهي بعد ' + days + ' يوم') : 'انتهت صلاحية التذكّر');
+    } else {
+      meta.push('تنتهي الجلسة عند إغلاق المتصفح');
+    }
+    if (info.startedAt) meta.push('بدأت الجلسة ' + UI.relTime(info.startedAt));
+    $('#menuSession').textContent = meta.join(' • ');
+  }
+  function toggleUserMenu(force) {
+    var m = $('#userMenu');
+    if (!m) return;
+    var open = (force === undefined) ? m.hidden : !!force;
+    m.hidden = !open;
+    $('#userBtn').setAttribute('aria-expanded', open ? 'true' : 'false');
+    if (open) renderUserMenu();
+  }
+
   function hideAuth() {
     $('#authScreen').hidden = true;
+    $('#lockScreen').hidden = true;
     $('#appShell').hidden = false;
     document.body.classList.remove('is-auth');
   }
@@ -212,14 +339,16 @@
     $('#userName').textContent = user.name;
     $('#userEmail').textContent = user.email;
     $('#userAvatar').textContent = UI.initials(user.name);
+    $('#topAvatar').textContent = UI.initials(user.name);
     $('#setName').value = user.name;
     $('#setEmail').value = user.email;
+    renderUserMenu();
     setHash('dashboard');
     renderAll();
     startEngine();
     resetIdle();
     UI.toast({
-      type: 'ok', title: 'أهلاً ' + user.name.split(' ')[0] + ' 👋',
+      type: 'ok', title: 'أهلاً ' + (String(user.name || '').split(' ')[0] || 'بك') + ' 👋',
       text: 'كل بياناتك خاصة بك ومحفوظة على هذا الجهاز.'
     });
   }
@@ -786,6 +915,31 @@
     renderWhatsAppSettings();
     renderParentsSettings();
     renderSupabaseSettings();
+    renderSessionCard();
+  }
+
+  /* بطاقة الجلسة في الإعدادات */
+  function renderSessionCard() {
+    var info = Store.sessionInfo();
+    var el = $('#sessionState'), chip = $('#sessionChip');
+    if (!el || !chip) return;
+    if (!info) {
+      el.textContent = 'لا توجد جلسة نشطة';
+      chip.textContent = 'غير نشط';
+      chip.className = 'chip chip--danger';
+      return;
+    }
+    var txt = info.supabase ? 'جلسة عبر Supabase' : 'جلسة محلية على هذا الجهاز';
+    if (info.persistent && info.expiresAt) {
+      var days = Math.max(0, Math.ceil((info.expiresAt - Date.now()) / 86400000));
+      txt += ' • تذكّرني — تنتهي بعد ' + days + ' يوم';
+    } else {
+      txt += ' • تنتهي عند إغلاق المتصفح';
+    }
+    txt += ' • بدأت ' + UI.relTime(info.startedAt);
+    el.textContent = txt;
+    chip.textContent = 'نشط';
+    chip.className = 'chip chip--ok';
   }
 
   /* قائمة تصفية المهام حسب الحقول المخصصة */
@@ -2127,6 +2281,7 @@
       if (e.key === 'Escape') {
         Voice.stop();
         closeSelects();
+        toggleUserMenu(false);
         if (isMobile()) closeSidebar();
       }
     });
@@ -2377,14 +2532,36 @@
       });
     });
     $('#logoutBtn').addEventListener('click', function () {
-      Store.logout();
-      state.locked = false;
-      $('#loginEmail').value = '';
-      $('#loginEmail').disabled = false;
-      $('#loginPassword').value = '';
-      showAuth(false);
-      UI.toast({ type: 'ok', title: 'تم تسجيل الخروج', text: 'بياناتك محفوظة على الجهاز.' });
+      logoutApp();
     });
+
+    /* lock & account menu */
+    $('#lockUnlockBtn').addEventListener('click', unlockApp);
+    $('#lockPassword').addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') { e.preventDefault(); unlockApp(); }
+    });
+    $('#lockToggle').addEventListener('click', function () {
+      var inp = $('#lockPassword');
+      var show = inp.type === 'password';
+      inp.type = show ? 'text' : 'password';
+      this.textContent = show ? 'إخفاء' : 'إظهار';
+    });
+    $('#lockLogoutBtn').addEventListener('click', function () { logoutApp(); });
+    $('#lockAppBtn').addEventListener('click', function () { lockApp(); });
+
+    $('#userBtn').addEventListener('click', function (e) {
+      e.stopPropagation();
+      toggleUserMenu();
+    });
+    $('#menuProfile').addEventListener('click', function () { toggleUserMenu(false); setHash('settings'); });
+    $('#menuSettings').addEventListener('click', function () { toggleUserMenu(false); setHash('settings'); });
+    $('#menuLock').addEventListener('click', function () { toggleUserMenu(false); lockApp(); });
+    $('#menuLogout').addEventListener('click', function () { toggleUserMenu(false); logoutApp(); });
+    $('#menuLogoutAll').addEventListener('click', function () { toggleUserMenu(false); logoutEverywhere(); });
+    document.addEventListener('click', function (e) {
+      if (!e.target.closest('#userMenuWrap')) toggleUserMenu(false);
+    });
+    $('#forgotBtn').addEventListener('click', forgotPassword);
 
     /* delegated actions */
     document.addEventListener('click', onDelegated);
@@ -2667,9 +2844,7 @@
   function lockApp() {
     state.locked = true;
     Voice.stop();
-    showAuth(true);
-    $('#loginPassword').value = '';
-    UI.toast({ type: 'info', title: 'التطبيق مقفل', text: 'أدخل كلمة المرور للمتابعة.' });
+    showLock();
   }
 
   function resetIdle() {

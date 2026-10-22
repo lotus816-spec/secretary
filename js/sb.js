@@ -111,6 +111,21 @@
       .catch(function () { return true; });
   }
 
+  /* نسيت كلمة المرور: إرسال رابط إعادة التعيين إلى البريد */
+  function resetPassword(email, redirectTo) {
+    return request('/auth/v1/recover', {
+      method: 'POST', token: null,
+      body: { email: email, gotrue_meta_security: {} , redirect_to: redirectTo || (cfg.url + '/') }
+    });
+  }
+
+  /* تعيين كلمة مرور جديدة (بعد رابط الاستعادة) */
+  function updatePassword(newPassword) {
+    return request('/auth/v1/user', {
+      method: 'PUT', body: { password: newPassword }
+    });
+  }
+
   /* ---------------- Data (PostgREST) ---------------- */
   function select(table, query) {
     var q = query ? ('?' + query) : '';
@@ -143,6 +158,8 @@
     signIn: signIn,
     signUp: signUp,
     signOut: signOut,
+    resetPassword: resetPassword,
+    updatePassword: updatePassword,
     restoreSession: restoreSession,
     select: select,
     upsert: upsert,
