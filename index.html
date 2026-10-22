@@ -17,7 +17,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800;900&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/styles.css?v=9">
+<link rel="stylesheet" href="css/styles.css?v=10">
 </head>
 <body>
 
@@ -239,6 +239,7 @@
       <p class="nav__label">المتابعة</p>
       <a class="nav__item" href="#/plans" data-view="plans"><svg viewBox="0 0 24 24"><use href="#i-plans"/></svg><span>الخطط والتجديد</span><em class="nav__badge nav__badge--warn" id="navBadgePlans"></em></a>
       <a class="nav__item" href="#/notes" data-view="notes"><svg viewBox="0 0 24 24"><use href="#i-notes"/></svg><span>الملاحظات</span></a>
+      <a class="nav__item" href="#/contacts" data-view="contacts"><svg viewBox="0 0 24 24"><use href="#i-group"/></svg><span>قائمة المستخدمين</span><em class="nav__badge" id="navBadgeContacts"></em></a>
       <a class="nav__item" href="#/archive" data-view="archive"><svg viewBox="0 0 24 24"><use href="#i-archive"/></svg><span>الأرشيف والسلة</span><em class="nav__badge nav__badge--warn" id="navBadgeArchive"></em></a>
       <p class="nav__label">الحساب</p>
       <a class="nav__item" href="#/settings" data-view="settings"><svg viewBox="0 0 24 24"><use href="#i-settings"/></svg><span>الإعدادات</span></a>
@@ -389,6 +390,7 @@
           <div class="card__head">
             <h3><svg viewBox="0 0 24 24"><use href="#i-tasks"/></svg> المهام</h3>
             <div class="rowActions">
+              <button class="btn btn--soft btn--sm" data-add-meeting><svg viewBox="0 0 24 24"><use href="#i-group"/></svg><span>اجتماع</span></button>
               <button class="btn btn--soft btn--sm" id="dayReadBtn"><svg viewBox="0 0 24 24"><use href="#i-speak"/></svg><span>اقرأ بصوت</span></button>
               <button class="btn btn--primary btn--sm" data-add-task><svg viewBox="0 0 24 24"><use href="#i-plus"/></svg><span>مهمة</span></button>
             </div>
@@ -551,6 +553,41 @@
           </div>
         </div>
         <div class="notesGrid" id="notesGrid"></div>
+      </section>
+
+      <!-- ========== USERS LIST ========== -->
+      <section class="view" id="view-contacts">
+        <div class="viewBar">
+          <div class="viewBar__title">
+            <h2>قائمة المستخدمين</h2>
+            <p>جهات الاتصال التي ترسل لهم التنبيهات: أولياء الأمور، المعلمون، الإدارة</p>
+          </div>
+          <div class="viewBar__tools">
+            <div class="search search--inline">
+              <svg class="search__icon" viewBox="0 0 24 24"><use href="#i-search"/></svg>
+              <input type="search" id="contactSearch" placeholder="ابحث بالاسم أو الرقم…" aria-label="بحث في المستخدمين">
+            </div>
+            <select class="select" id="contactRoleFilter" aria-label="تصفية حسب الدور">
+              <option value="all">كل الأدوار</option>
+              <option value="parent">ولي أمر</option>
+              <option value="teacher">معلم / معلمات</option>
+              <option value="admin">إدارة</option>
+              <option value="student">طالب</option>
+              <option value="other">أخرى</option>
+            </select>
+            <button class="btn btn--primary btn--sm" id="addContactBtn"><svg viewBox="0 0 24 24"><use href="#i-plus"/></svg><span>مستخدم جديد</span></button>
+          </div>
+        </div>
+
+        <div class="stats" id="contactStats"></div>
+
+        <div class="card">
+          <div class="card__head">
+            <h3><svg viewBox="0 0 24 24"><use href="#i-group"/></svg> جهات الاتصال</h3>
+            <span class="chip chip--soft" id="contactCount">0</span>
+          </div>
+          <div class="contactGrid" id="contactGrid"></div>
+        </div>
       </section>
 
       <!-- ========== ARCHIVE & TRASH ========== -->
@@ -773,6 +810,10 @@
               <div><strong>نص الترويسة</strong><small>يظهر في أعلى كل رسالة</small></div>
               <input class="input" id="pgHeader" type="text" placeholder="📢 تذكير من إدارة المدرسة — نرجو الاطلاع">
             </div>
+            <div class="setRow setRow--stack">
+              <div><strong>المستقبِل</strong><small>المجموعة أو مستخدم بعينه من قائمة المستخدمين</small></div>
+              <select class="select" id="pgTo" aria-label="المستقبِل"></select>
+            </div>
             <div class="setRow">
               <div><strong>الملخص اليومي التلقائي</strong><small>إرسال مواعيد اليوم للمجموعة كل صباح</small></div>
               <label class="switch"><input type="checkbox" id="pgAuto"><i></i></label>
@@ -849,12 +890,12 @@
 <div class="modalHost" id="modalHost" hidden></div>
 <div class="srOnly" id="liveRegion" aria-live="polite" aria-atomic="true"></div>
 
-<script src="js/store.js?v=9"></script>
-<script src="js/sb.js?v=9"></script>
-<script src="js/voice.js?v=9"></script>
-<script src="js/notify.js?v=9"></script>
-<script src="js/charts.js?v=9"></script>
-<script src="js/ui.js?v=9"></script>
-<script src="js/app.js?v=9"></script>
+<script src="js/store.js?v=10"></script>
+<script src="js/sb.js?v=10"></script>
+<script src="js/voice.js?v=10"></script>
+<script src="js/notify.js?v=10"></script>
+<script src="js/charts.js?v=10"></script>
+<script src="js/ui.js?v=10"></script>
+<script src="js/app.js?v=10"></script>
 </body>
 </html>

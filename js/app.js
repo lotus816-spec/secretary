@@ -22,6 +22,8 @@
     taskSort: 'date',
     taskField: '',
     notesCat: 'all',
+    contactQuery: '',
+    contactRole: 'all',
     archiveTab: 'archived',
     reminderTimer: null,
     idleTimer: null,
@@ -37,6 +39,7 @@
     tasks: { title: 'كل المهام', sub: 'قائمة شاملة قابلة للفلترة', icon: 'tasks' },
     plans: { title: 'الخطط والتجديد', sub: 'متابعة الخطط وتواريخ الانتهاء', icon: 'plans' },
     notes: { title: 'الملاحظات', sub: 'سجلاتك الخاصة', icon: 'notes' },
+    contacts: { title: 'قائمة المستخدمين', sub: 'جهات الاتصال لتنبيهات واتساب', icon: 'group' },
     archive: { title: 'الأرشيف والسلة', sub: 'استرجع ما حذفته أو أرشفته', icon: 'archive' },
     settings: { title: 'الإعدادات', sub: 'اضبط التطبيق حسب احتياجك', icon: 'settings' }
   };
@@ -386,6 +389,7 @@
     renderTasks();
     renderPlans();
     renderNotes();
+    renderContacts();
     renderArchive();
     renderSettings();
     renderBadges();
@@ -399,6 +403,7 @@
       case 'tasks': renderTasks(); break;
       case 'plans': renderPlans(); break;
       case 'notes': renderNotes(); break;
+      case 'contacts': renderContacts(); break;
       case 'archive': renderArchive(); break;
       case 'settings': renderSettings(); break;
     }
@@ -424,6 +429,9 @@
     var ast = Store.archiveStats();
     var archCount = ast.archived + ast.trashed;
     $('#navBadgeArchive').textContent = archCount ? archCount : '';
+
+    var ccount = contacts().length;
+    $('#navBadgeContacts').textContent = ccount ? ccount : '';
   }
 
   /* ---------------- dashboard ---------------- */
@@ -556,6 +564,16 @@
   /* ---------------- day ---------------- */
   function dayDate(offset) { return shiftDate(today(), offset); }
 
+  function typeChipFor(t) {
+    if (t.type === 'meeting') return '<span class="chip chip--meeting">' + UI.icon('group') + 'اجتماع</span>';
+    if (t.type === 'reminder') return '<span class="chip chip--remind">' + UI.icon('bell') + 'تذكير</span>';
+    return '';
+  }
+  function timeRange(t) {
+    if (!t.time) return '—';
+    return t.endTime ? (t.time + ' – ' + t.endTime) : t.time;
+  }
+
   function renderDay() {
     var iso = dayDate(state.dayOffset);
     $('#dayTitle').textContent = state.dayOffset === 0 ? 'اليوم' : UI.fmtDate(iso, { weekday: true });
@@ -577,13 +595,13 @@
       var over = isOverdue(t);
       return '<div class="tlRow ' + (t.status === 'done' ? 'is-done' : '') + (over ? ' is-overdue' : '') +
         ' tlRow--' + t.category + '">' +
-        '<div class="tlRow__time">' + (t.time ? t.time : '—') + '<small>' + (t.time ? 'ص/م' : 'مرن') + '</small></div>' +
+        '<div class="tlRow__time">' + (t.time ? timeRange(t) : '—') + '<small>' + (t.time ? (t.type === 'meeting' ? 'موعد' : 'ص/م') : 'مرن') + '</small></div>' +
         '<div class="tlRow__line"><i></i></div>' +
         '<div class="tlRow__card">' +
         '<button class="tick ' + (t.status === 'done' ? 'is-on' : '') + '" data-toggle="' + t.id + '" aria-label="إنجاز">' + UI.icon('check') + '</button>' +
         '<div style="min-width:0;flex:1">' +
         '<div class="tlRow__title">' + esc(t.title) + '</div>' +
-        '<div class="tlRow__sub">' + catChip(t.category) + priorityChip(t.priority) +
+        '<div class="tlRow__sub">' + typeChipFor(t) + catChip(t.category) + priorityChip(t.priority) +
         (t.repeat && t.repeat !== 'none' ? '<span class="chip">' + UI.icon('repeat') + repeatLabel(t.repeat) + '</span>' : '') +
         (t.notes ? '<span class="chip" title="' + esc(t.notes) + '">' + UI.icon('notes') + 'ملاحظة</span>' : '') +
         (over ? '<span class="chip chip--danger">متأخرة</span>' : '') +
@@ -756,7 +774,7 @@
           '</div></td>' +
           '<td>' + catChip(t.category) + '</td>' +
           '<td class="ltr">' + UI.fmtDate(t.date, { year: false }) + (over ? ' <span class="chip chip--danger">متأخرة</span>' : '') + '</td>' +
-          '<td class="ltr">' + (t.time ? t.time : '—') + '</td>' +
+          '<td class="ltr">' + (t.time ? timeRange(t) : '—') + '</td>' +
           '<td>' + priorityChip(t.priority) + '</td>' +
           '<td>' + (t.repeat && t.repeat !== 'none' ? '<span class="chip">' + UI.icon('repeat') + repeatLabel(t.repeat) + '</span>' : '<span style="color:var(--muted-2)">—</span>') + '</td>' +
           '<td>' + (t.status === 'done' ? '<span class="chip chip--ok">منجزة</span>' : '<span class="chip">قيد التنفيذ</span>') + '</td>' +
@@ -976,10 +994,11 @@
      task modal
      ========================================================== */
   function taskModal(task) {
-    var t = task || {
-      title: '', notes: '', date: defaultTaskDate(), time: '', duration: 30,
-      category: 'personal', priority: 'med', status: 'todo', reminder: true, repeat: 'none'
-    };
+    var isNew = !(task && task.id);
+    var t = Object.assign({
+      title: '', notes: '', date: defaultTaskDate(), time: '', endTime: '', duration: 30,
+      category: 'personal', priority: 'med', status: 'todo', reminder: true, repeat: 'none', type: 'task'
+    }, task || {});
     var body = document.createElement('div');
     body.innerHTML =
       '<div class="field"><label>عنوان المهمة</label>' +
@@ -989,6 +1008,11 @@
       '<textarea class="input" id="fNotes" placeholder="تفاصيل، روابط، أسماء...">' + UI.esc(t.notes || '') + '</textarea></div>' +
 
       '<div class="modal__grid">' +
+      '<div class="field full"><label>نوع العنصر</label><div class="optRow" id="fType">' +
+      '<button type="button" class="optChip optChip--task' + ((!t.type || t.type === 'task') ? ' is-on' : '') + '" data-val="task">مهمة</button>' +
+      '<button type="button" class="optChip optChip--meeting' + (t.type === 'meeting' ? ' is-on' : '') + '" data-val="meeting">اجتماع / موعد</button>' +
+      '<button type="button" class="optChip optChip--reminder' + (t.type === 'reminder' ? ' is-on' : '') + '" data-val="reminder">تذكير</button>' +
+      '</div></div>' +
       '<div class="field"><label>النوع</label><div class="catPicker" id="fCat">' +
       '<label class="catOpt catOpt--work' + (t.category === 'work' ? ' is-on' : '') + '" data-val="work">' +
       '<input type="radio" name="fcat" value="work"' + (t.category === 'work' ? ' checked' : '') + '>' + UI.icon('work') + 'عمل</label>' +
@@ -1001,9 +1025,10 @@
       '</div></div>' +
 
       '<div class="field"><label>التاريخ</label><input class="input ltr" id="fDate" type="date" value="' + UI.esc(t.date) + '"></div>' +
-      '<div class="field"><label>الوقت</label><input class="input ltr" id="fTime" type="time" value="' + UI.esc(t.time || '') + '"></div>' +
-
+      '<div class="field"><label>وقت البداية</label><input class="input ltr" id="fTime" type="time" value="' + UI.esc(t.time || '') + '"></div>' +
+      '<div class="field"><label>وقت النهاية</label><input class="input ltr" id="fEndTime" type="time" value="' + UI.esc(t.endTime || '') + '"></div>' +
       '<div class="field"><label>المدة (دقائق)</label><input class="input ltr" id="fDuration" type="number" min="5" step="5" value="' + (t.duration || 30) + '"></div>' +
+
       '<div class="field"><label>التكرار</label><select class="select" id="fRepeat">' +
       ['none', 'daily', 'weekly', 'biweekly', 'monthly', 'yearly'].map(function (r) {
         return '<option value="' + r + '"' + (t.repeat === r ? ' selected' : '') + '>' + cycleLabel(r) + '</option>';
@@ -1052,10 +1077,12 @@
             var payload = {
               title: title,
               notes: body.querySelector('#fNotes').value.trim(),
+              type: (body.querySelector('#fType .is-on') || { dataset: { val: 'task' } }).dataset.val,
               category: (body.querySelector('input[name="fcat"]:checked') || {}).value || 'personal',
-              priority: body.querySelector('#fPriority .is-on').dataset.val,
+              priority: (body.querySelector('#fPriority .is-on') || { dataset: { val: 'med' } }).dataset.val,
               date: body.querySelector('#fDate').value || today(),
               time: body.querySelector('#fTime').value || '',
+              endTime: body.querySelector('#fEndTime').value || '',
               duration: parseInt(body.querySelector('#fDuration').value, 10) || 30,
               repeat: body.querySelector('#fRepeat').value,
               reminder: body.querySelector('#fReminder').checked,
@@ -1072,9 +1099,9 @@
                 return false;
               }
             }
-            if (task) {
-              if (payload.status === 'done' && task.status !== 'done') payload.doneAt = Date.now();
-              Store.updateTask(task.id, payload);
+            if (!isNew) {
+              if (payload.status === 'done' && t.status !== 'done') payload.doneAt = Date.now();
+              Store.updateTask(t.id, payload);
               UI.toast({ type: 'ok', title: 'تم حفظ التعديلات' });
             } else {
               Store.addTask(payload);
@@ -1100,6 +1127,49 @@
       $$('.optChip', prWrap).forEach(function (x) { x.classList.remove('is-on'); });
       chip.classList.add('is-on');
     });
+    var tyWrap = body.querySelector('#fType');
+    if (tyWrap) {
+      tyWrap.addEventListener('click', function (e) {
+        var chip = e.target.closest('.optChip'); if (!chip) return;
+        $$('.optChip', tyWrap).forEach(function (x) { x.classList.remove('is-on'); });
+        chip.classList.add('is-on');
+      });
+    }
+
+    /* مزامنة وقت البداية / النهاية / المدة تلقائياً */
+    var fTime = body.querySelector('#fTime');
+    var fEnd = body.querySelector('#fEndTime');
+    var fDur = body.querySelector('#fDuration');
+    function mins(hhmm) {
+      if (!hhmm) return null;
+      var p = hhmm.split(':');
+      return parseInt(p[0], 10) * 60 + parseInt(p[1], 10);
+    }
+    function hhmm(m) {
+      m = ((m % 1440) + 1440) % 1440;
+      return String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0');
+    }
+    if (fTime && fEnd && fDur) {
+      fTime.addEventListener('change', function () {
+        var s = mins(fTime.value);
+        if (s === null) { fEnd.value = ''; return; }
+        var d = parseInt(fDur.value, 10) || 30;
+        fEnd.value = hhmm(s + d);
+      });
+      fDur.addEventListener('input', function () {
+        var s = mins(fTime.value);
+        if (s === null) return;
+        var d = parseInt(fDur.value, 10);
+        if (d > 0) fEnd.value = hhmm(s + d);
+      });
+      fEnd.addEventListener('change', function () {
+        var s = mins(fTime.value), e2 = mins(fEnd.value);
+        if (s === null || e2 === null) return;
+        var d = e2 - s;
+        if (d <= 0) d += 1440;
+        fDur.value = d;
+      });
+    }
     return m;
   }
 
@@ -1725,7 +1795,7 @@
      ========================================================== */
   function archiveEntries(mode) {
     var out = [];
-    var groups = { task: tasksAll(), plan: plansAll(), note: notesAll() };
+    var groups = { task: tasksAll(), plan: plansAll(), note: notesAll(), contact: contactsAll() };
     Object.keys(groups).forEach(function (kind) {
       groups[kind].forEach(function (x) {
         var isTrash = !!x.deletedAt;
@@ -1737,15 +1807,17 @@
   }
 
   function archiveItemHTML(kind, x, mode) {
-    var typeLabel = kind === 'task' ? 'مهمة' : kind === 'plan' ? 'خطة' : 'ملاحظة';
-    var typeIcon = kind === 'task' ? 'tasks' : kind === 'plan' ? 'plans' : 'notes';
+    var typeLabel = kind === 'task' ? 'مهمة' : kind === 'plan' ? 'خطة' : kind === 'note' ? 'ملاحظة' : 'مستخدم';
+    var typeIcon = kind === 'task' ? 'tasks' : kind === 'plan' ? 'plans' : kind === 'note' ? 'notes' : 'group';
     var meta = '';
     if (kind === 'task') {
-      meta = UI.fmtDate(x.date, { year: false }) + (x.time ? ' · ' + x.time : '') +
+      meta = UI.fmtDate(x.date, { year: false }) + (x.time ? ' · ' + timeRange(x) : '') +
         ' · ' + (x.category === 'work' ? 'عمل' : 'شخصي') +
         (x.status === 'done' ? ' · منجزة' : '');
     } else if (kind === 'plan') {
       meta = 'تنتهي في ' + UI.fmtDate(x.expiryDate) + ' · ' + cycleLabel(x.cycle);
+    } else if (kind === 'contact') {
+      meta = (x.phone || '—') + (x.role ? ' · ' + roleLabel(x.role) : '');
     } else {
       meta = (x.text || '').slice(0, 70) + (x.text && x.text.length > 70 ? '…' : '');
     }
@@ -1876,7 +1948,7 @@
       s.parents = {
         link: '', groupId: '',
         header: '📢 تذكير من إدارة المدرسة — نرجو الاطلاع',
-        auto: false, time: '07:00', category: 'all'
+        auto: false, time: '07:00', category: 'all', to: 'group'
       };
     }
     return s.parents;
@@ -1964,6 +2036,13 @@
   function sendToParents(text, opts) {
     opts = opts || {};
     var p = pgConfig();
+
+    /* إرسال إلى مستخدم بعينه من قائمة المستخدمين */
+    if (p.to && p.to !== 'group') {
+      var ct = contactsAll().filter(function (c) { return c.id === p.to; })[0];
+      if (ct) return sendToContact(ct, text, opts);
+    }
+
     if (!p.link && !p.groupId) {
       UI.toast({
         type: 'err', title: 'المجموعة غير مُعدّة',
@@ -2060,6 +2139,19 @@
     if (document.activeElement !== $('#pgLink')) $('#pgLink').value = p.link || '';
     if (document.activeElement !== $('#pgId')) $('#pgId').value = p.groupId || '';
     if (document.activeElement !== $('#pgHeader')) $('#pgHeader').value = p.header || '';
+    /* قائمة المستقبِلين */
+    var toSel = $('#pgTo');
+    if (toSel) {
+      var sig = contacts().map(function (c) { return c.id + ':' + c.name; }).join('|') + '#' + (p.to || 'group');
+      if (toSel.dataset.sig !== sig) {
+        toSel.dataset.sig = sig;
+        toSel.innerHTML = '<option value="group">مجموعة أولياء الأمور</option>' +
+          contacts().map(function (c) {
+            return '<option value="' + c.id + '">' + esc(c.name || 'بدون اسم') + (c.phone ? ' — ' + esc(c.phone) : '') + '</option>';
+          }).join('');
+      }
+      toSel.value = p.to || 'group';
+    }
     $('#pgAuto').checked = !!p.auto;
     var h = parseInt((p.time || '07:00').split(':')[0], 10) || 0;
     $('#pgTime').value = h;
@@ -2073,6 +2165,7 @@
     p.link = $('#pgLink').value.trim();
     p.groupId = $('#pgId').value.trim();
     p.header = $('#pgHeader').value.trim();
+    p.to = $('#pgTo') ? $('#pgTo').value : 'group';
     p.auto = $('#pgAuto').checked;
     var h = parseInt($('#pgTime').value, 10) || 0;
     p.time = (h < 10 ? '0' : '') + h + ':00';
@@ -2117,6 +2210,190 @@
     if (email) $('#loginEmail').value = email;
     $('#loginPassword').value = '';
     $('#loginPassword').focus();
+  }
+
+  /* ---------------- قائمة المستخدمين (جهات الاتصال) ---------------- */
+  var CONTACT_ROLES = [
+    { v: 'parent', label: 'ولي أمر', icon: 'home' },
+    { v: 'teacher', label: 'معلم / معلمات', icon: 'user' },
+    { v: 'admin', label: 'إدارة', icon: 'shield' },
+    { v: 'student', label: 'طالب', icon: 'user' },
+    { v: 'other', label: 'أخرى', icon: 'group' }
+  ];
+  function roleLabel(v) {
+    for (var i = 0; i < CONTACT_ROLES.length; i++) if (CONTACT_ROLES[i].v === v) return CONTACT_ROLES[i].label;
+    return 'أخرى';
+  }
+  function contacts() {
+    return active((D() && D().contacts) || []);
+  }
+  function contactsAll() { return (D() && D().contacts) || []; }
+
+  function renderContacts() {
+    var q = (state.contactQuery || '').trim().toLowerCase();
+    var role = state.contactRole || 'all';
+    var all = contacts();
+    var list = all.filter(function (c) {
+      if (role !== 'all' && c.role !== role) return false;
+      if (q) {
+        var hay = (c.name + ' ' + (c.phone || '') + ' ' + (c.note || '') + ' ' + roleLabel(c.role)).toLowerCase();
+        if (hay.indexOf(q) === -1) return false;
+      }
+      return true;
+    });
+
+    var byRole = {};
+    CONTACT_ROLES.forEach(function (r) { byRole[r.v] = 0; });
+    all.forEach(function (c) { byRole[c.role] = (byRole[c.role] || 0) + 1; });
+
+    $('#contactStats').innerHTML = [
+      { icon: 'group', cls: '', label: 'إجمالي المستخدمين', value: all.length },
+      { icon: 'home', cls: 'stat__ico--teal', label: 'أولياء الأمور', value: byRole.parent || 0 },
+      { icon: 'user', cls: 'stat__ico--violet', label: 'معلمون', value: byRole.teacher || 0 },
+      { icon: 'shield', cls: 'stat__ico--amber', label: 'إدارة', value: byRole.admin || 0 }
+    ].map(function (s) {
+      return '<div class="stat"><div class="stat__ico ' + s.cls + '">' + UI.icon(s.icon) + '</div>' +
+        '<div><div class="stat__val">' + s.value + '</div><div class="stat__label">' + s.label + '</div></div></div>';
+    }).join('');
+
+    $('#contactCount').textContent = list.length + ' ' + UI.plural(list.length, 'مستخدم', 'مستخدمان', 'مستخدمين', 'مستخدماً');
+
+    var el = $('#contactGrid');
+    if (!list.length) {
+      el.innerHTML = '<div class="empty">' + UI.icon('group') +
+        '<b>' + (all.length ? 'لا نتائج للبحث' : 'لا يوجد مستخدمون بعد') + '</b>' +
+        '<span>' + (all.length ? 'جرّب اسماً أو رقماً آخر.' : 'أضف أولياء الأمور والمعلمين والإدارة لتتمكّن من إرسال تنبيهات واتساب لهم مباشرة.') + '</span></div>';
+      return;
+    }
+    el.innerHTML = list.map(function (c) {
+      return '<div class="contactCard" style="--cColor:' + esc(c.color || '#1d4ed8') + '">' +
+        '<div class="contactCard__top">' +
+        '<span class="contactCard__avatar">' + UI.esc(UI.initials(c.name)) + '</span>' +
+        '<div class="contactCard__id">' +
+        '<div class="contactCard__name">' + esc(c.name || 'بدون اسم') +
+        '<span class="chip">' + esc(roleLabel(c.role)) + '</span></div>' +
+        '<div class="contactCard__phone ltr">' + (c.phone ? esc(c.phone) : '—') + '</div>' +
+        '</div></div>' +
+        (c.note ? '<div class="contactCard__note">' + esc(c.note) + '</div>' : '') +
+        '<div class="contactCard__acts">' +
+        (c.phone ? '<button class="btn btn--soft btn--sm" data-contact-wa="' + c.id + '">' + UI.icon('speak') + 'تنبيه واتساب</button>' : '') +
+        '<button class="iconBtn" data-edit-contact="' + c.id + '" title="تعديل">' + UI.icon('edit') + '</button>' +
+        '<button class="iconBtn" data-del-contact="' + c.id + '" title="حذف">' + UI.icon('trash') + '</button>' +
+        '</div></div>';
+    }).join('');
+  }
+
+  function contactModal(contact) {
+    var c = contact || { id: Store.uid('c'), name: '', phone: '', role: 'parent', note: '', color: '#1d4ed8' };
+    var body = document.createElement('div');
+    body.innerHTML =
+      '<div class="modal__grid">' +
+      '<div class="field"><label>الاسم</label>' +
+      '<div class="field__ctrl"><input id="cName" type="text" value="' + UI.esc(c.name) + '" placeholder="مثال: أحمد，一场"></div></div>' +
+      '<div class="field"><label>رقم واتساب</label>' +
+      '<div class="field__ctrl"><input id="cPhone" class="ltr" type="tel" inputmode="tel" value="' + UI.esc(c.phone || '') + '" placeholder="213xxxxxxxxx"></div></div>' +
+      '<div class="field"><label>الدور</label><select class="select" id="cRole">' +
+      CONTACT_ROLES.map(function (r) {
+        return '<option value="' + r.v + '"' + (c.role === r.v ? ' selected' : '') + '>' + r.label + '</option>';
+      }).join('') + '</select></div>' +
+      '<div class="field"><label>ملاحظة</label><input id="cNote" type="text" value="' + UI.esc(c.note || '') + '" placeholder="الصف،relationship..."></div>' +
+      '</div>' +
+      '<div class="field"><label>اللون</label><div class="optRow" id="cColor">' +
+      ['#1d4ed8', '#0d9488', '#7c3aed', '#e11d48', '#d97706', '#059669'].map(function (col) {
+        return '<button type="button" class="swatch' + (col === c.color ? ' is-on' : '') + '" data-val="' + col + '" style="background:' + col + '"></button>';
+      }).join('') + '</div></div>';
+
+    UI.modal({
+      title: contact ? 'تعديل المستخدم' : 'مستخدم جديد',
+      icon: 'group',
+      body: body,
+      buttons: [
+        { label: 'إلغاء', class: 'btn--ghost' },
+        {
+          label: contact ? 'حفظ' : 'إضافة', class: 'btn--primary', onClick: function () {
+            var name = body.querySelector('#cName').value.trim();
+            if (!name) {
+              UI.toast({ type: 'err', title: 'الاسم مطلوب' });
+              body.querySelector('#cName').focus();
+              return false;
+            }
+            var payload = {
+              name: name,
+              phone: body.querySelector('#cPhone').value.trim(),
+              role: body.querySelector('#cRole').value,
+              note: body.querySelector('#cNote').value.trim(),
+              color: (body.querySelector('#cColor .is-on') || { dataset: { val: '#1d4ed8' } }).dataset.val
+            };
+            if (contact) { Store.updateContact(contact.id, payload); UI.toast({ type: 'ok', title: 'تم تحديث البيانات' }); }
+            else { Store.addContact(payload); UI.toast({ type: 'ok', title: 'تمت إضافة المستخدم' }); }
+            renderContacts();
+            renderBadges();
+          }
+        }
+      ]
+    });
+    var cw = body.querySelector('#cColor');
+    cw.addEventListener('click', function (e) {
+      var b = e.target.closest('.swatch'); if (!b) return;
+      $$('.swatch', cw).forEach(function (x) { x.classList.remove('is-on'); });
+      b.classList.add('is-on');
+    });
+  }
+
+  function deleteContact(id) {
+    var c = contactsAll().filter(function (x) { return x.id === id; })[0];
+    if (!c) return;
+    UI.confirm({
+      title: 'حذف المستخدم', danger: true, confirmLabel: 'نقل إلى السلة',
+      text: 'سيُنقل «' + (c.name || '') + '» إلى سلة المحذوفات ويمكنك استرجاعه لاحقاً.'
+    }).then(function (ok) {
+      if (!ok) return;
+      Store.trashItem('contacts', id);
+      renderContacts(); renderBadges();
+      UI.toast({
+        type: 'ok', title: 'نُقل إلى سلة المحذوفات', duration: 8000,
+        actions: [{ label: 'تراجع', onClick: function () { Store.restoreItem('contacts', id); renderContacts(); renderBadges(); } }]
+      });
+    });
+  }
+
+  /* تنبيه واتساب لمستخدم محدّد */
+  function sendToContact(c, text, opts) {
+    opts = opts || {};
+    if (!c.phone) {
+      UI.toast({ type: 'warn', title: 'لا يوجد رقم', text: 'أضف رقم واتساب لهذا المستخدم أولاً.' });
+      return Promise.resolve(false);
+    }
+    var w = waConfig();
+    Notify.configure(Object.assign({}, w, { enabled: true, target: 'number', phone: c.phone, provider: w.provider }));
+    return Notify.send(text).then(function (res) {
+      if (res && res.needTap) {
+        copyToClipboard(text);
+        UI.toast({
+          type: 'info', title: 'الرسالة جاهزة لـ ' + (c.name || ''),
+          text: 'تم نسخ الرسالة — اضغط «فتح واتساب» ثم أرسلها.', duration: 0,
+          actions: [{ label: 'فتح واتساب', onClick: function () { global.open(res.link, '_blank', 'noopener'); } }]
+        });
+      } else {
+        UI.toast({ type: 'ok', title: 'أُرسل التنبيه', text: c.name });
+      }
+      return true;
+    }).catch(function (e) {
+      UI.toast({ type: 'err', title: 'تعذّر الإرسال', text: e.message });
+      return false;
+    });
+  }
+
+  function notifyContact(id) {
+    var c = contactsAll().filter(function (x) { return x.id === id; })[0];
+    if (!c) return;
+    var iso = today();
+    var lines = ['📢 *' + (c.name || '') + '*', '', '🗓️ *مواعيد ' + UI.weekdayName(iso) + ' ' + UI.fmtDate(iso, { year: false }) + '*'];
+    var list = parentsTasksOf(iso);
+    if (!list.length) lines.push('لا توجد مواعيد اليوم.');
+    else list.slice(0, 20).forEach(function (t) { lines.push('• ' + t.time + ' — ' + t.title); });
+    lines.push('', '📌 للاستفسار تواصلوا مع الإدارة.');
+    sendToContact(c, lines.join('\n'), { title: 'الرسالة جاهزة لـ ' + (c.name || '') });
   }
 
   /* ==========================================================
@@ -2380,6 +2657,11 @@
     /* custom fields */
     $('#addFieldBtn').addEventListener('click', function () { fieldModal(null); });
 
+    /* contacts (users list) */
+    $('#addContactBtn').addEventListener('click', function () { contactModal(null); });
+    $('#contactSearch').addEventListener('input', function () { state.contactQuery = this.value; renderContacts(); });
+    $('#contactRoleFilter').addEventListener('change', function () { state.contactRole = this.value; renderContacts(); });
+
     /* archive & trash */
     $('#archiveTabs').addEventListener('click', function (e) {
       var b = e.target.closest('.seg__btn'); if (!b) return;
@@ -2422,7 +2704,7 @@
     });
 
     /* parents group settings */
-    ['#pgLink', '#pgId', '#pgHeader', '#pgAuto'].forEach(function (sel) {
+    ['#pgLink', '#pgId', '#pgHeader', '#pgAuto', '#pgTo'].forEach(function (sel) {
       var el = $(sel);
       if (!el) return;
       el.addEventListener('change', function () { saveParents(); renderParentsSettings(); });
@@ -2648,7 +2930,7 @@
   }
 
   function onDelegated(e) {
-    var el = e.target.closest('[data-toggle],[data-edit],[data-del],[data-speak],[data-open-task],[data-open-plan],[data-renew],[data-speak-plan],[data-edit-plan],[data-del-plan],[data-speak-note],[data-pin-note],[data-edit-note],[data-del-note],[data-msg-read],[data-msg-done],[data-add-task],[data-day],[data-edit-field],[data-del-field],[data-archive-task],[data-archive-plan],[data-archive-note],[data-unarchive],[data-trash],[data-restore],[data-purge],[data-send-group],[data-send-group-plan]');
+    var el = e.target.closest('[data-toggle],[data-edit],[data-del],[data-speak],[data-open-task],[data-open-plan],[data-renew],[data-speak-plan],[data-edit-plan],[data-del-plan],[data-speak-note],[data-pin-note],[data-edit-note],[data-del-note],[data-msg-read],[data-msg-done],[data-add-task],[data-day],[data-edit-field],[data-del-field],[data-archive-task],[data-archive-plan],[data-archive-note],[data-unarchive],[data-trash],[data-restore],[data-purge],[data-send-group],[data-send-group-plan],[data-edit-contact],[data-del-contact],[data-contact-wa],[data-add-meeting]');
     if (!el) return;
 
     if (el.hasAttribute('data-add-task')) { taskModal(null); return; }
@@ -2682,6 +2964,17 @@
     }
     if (el.dataset.delField) { deleteField(el.dataset.delField); return; }
     if (el.dataset.archiveTask) { doArchive('task', el.dataset.archiveTask); return; }
+    if (el.dataset.editContact) {
+      contactModal(contactsAll().filter(function (c) { return c.id === el.dataset.editContact; })[0]);
+      return;
+    }
+    if (el.dataset.delContact) { deleteContact(el.dataset.delContact); return; }
+    if (el.dataset.contactWa) { notifyContact(el.dataset.contactWa); return; }
+    if (el.hasAttribute('data-add-meeting')) {
+      var mt = { type: 'meeting', date: dayDate(state.dayOffset), time: '', endTime: '', duration: 60 };
+      taskModal(mt);
+      return;
+    }
     if (el.dataset.sendGroup) {
       var sgt = Store.getTask(el.dataset.sendGroup);
       if (sgt) sendToParents(buildParentsTask(sgt), { title: 'التنبيه جاهز للمجموعة' });

@@ -158,6 +158,7 @@
       tasks: [],
       plans: [],
       notes: [],
+      contacts: [],
       messages: [],
       settings: {
         theme: 'light',
@@ -191,16 +192,16 @@
     var uid = SB.userId();
     return SB.select('secretary_items', 'user_id=eq.' + uid + '&select=kind,id,data')
       .then(function (rows) {
-        var t = [], p = [], n = [];
+        var t = [], p = [], n = [], c = [];
         (rows || []).forEach(function (r) {
           var d = r.data || {};
           if (r.kind === 'task') t.push(d);
           else if (r.kind === 'plan') p.push(d);
           else if (r.kind === 'note') n.push(d);
-          else if (r.kind === 'settings') { /* handled below */ }
+          else if (r.kind === 'contact') c.push(d);
         });
         if (!data) data = defaultData(uid);
-        data.tasks = t; data.plans = p; data.notes = n;
+        data.tasks = t; data.plans = p; data.notes = n; data.contacts = c;
         saveData();
         emit('data', data);
         return true;
@@ -373,8 +374,9 @@
   /* ---------------- task helpers ---------------- */
   function addTask(task) {
     var t = Object.assign({
-      id: uid('t'), title: '', notes: '', date: todayISO(), time: '', duration: 30,
+      id: uid('t'), title: '', notes: '', date: todayISO(), time: '', endTime: '', duration: 30,
       category: 'personal', priority: 'med', status: 'todo', reminder: true,
+      type: 'task',           // task | meeting | appointment | reminder
       repeat: 'none', createdAt: Date.now(), doneAt: null, remindedAt: null,
       whatsappSentAt: null, archived: false, archivedAt: null, deletedAt: null, tags: []
     }, task || {});
@@ -455,6 +457,38 @@
   function removeNote(id) {
     patch(function (d) { d.notes = d.notes.filter(function (n) { return n.id !== id; }); });
     syncRemove('note', id);
+  }
+
+  /* ---------------- contacts (قائمة المستخدمين) ---------------- */
+  function addContact(c) {
+    var ct = Object.assign({
+      id: uid('c'), name: '', phone: '', role: 'parent', groupLink: '',
+      note: '', color: '#1d4ed8', createdAt: Date.now(), archived: false, deletedAt: null
+    }, c || {});
+    patch(function (d) {
+      if (!d.contacts) d.contacts = [];
+      d.contacts.unshift(ct);
+    });
+    syncPush('contact', ct);
+    return ct;
+  }
+  function updateContact(id, changes) {
+    var updated = null;
+    patch(function (d) {
+      if (!d.contacts) return;
+      for (var i = 0; i < d.contacts.length; i++) {
+        if (d.contacts[i].id === id) {
+          d.contacts[i] = Object.assign({}, d.contacts[i], changes);
+          updated = d.contacts[i];
+          return;
+        }
+      }
+    });
+    if (updated) syncPush('contact', updated);
+  }
+  function removeContact(id) {
+    patch(function (d) { d.contacts = (d.contacts || []).filter(function (c) { return c.id !== id; }); });
+    syncRemove('contact', id);
   }
 
   /* ---------------- messages ---------------- */
@@ -556,7 +590,7 @@
 
   /* ---------------- generic archive / trash ---------------- */
   function kindOf(collection) {
-    return collection === 'tasks' ? 'task' : collection === 'plans' ? 'plan' : 'note';
+    return collection === 'tasks' ? 'task' : collection === 'plans' ? 'plan' : collection === 'notes' ? 'note' : 'contact';
   }
   function mutate(collection, id, fn) {
     var updated = null;
@@ -634,6 +668,7 @@
     addTask: addTask, updateTask: updateTask, removeTask: removeTask, getTask: getTask,
     addPlan: addPlan, updatePlan: updatePlan, removePlan: removePlan,
     addNote: addNote, updateNote: updateNote, removeNote: removeNote,
+    addContact: addContact, updateContact: updateContact, removeContact: removeContact,
     pushMessage: pushMessage, markMessage: markMessage, clearMessages: clearMessages,
     getSettings: getSettings, setSetting: setSetting,
     exportData: exportData, importData: importData,

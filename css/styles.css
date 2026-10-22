@@ -542,6 +542,40 @@ input[type="color"]{width:46px;height:36px;border:1px solid var(--border);border
   .arcItem__acts{width:100%; justify-content:flex-end}
 }
 
+/* ============ USERS LIST (CONTACTS) ============ */
+.contactGrid{display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:14px}
+.contactCard{
+  background:var(--surface); border:1px solid var(--border); border-radius:var(--r-lg); padding:15px;
+  display:flex; flex-direction:column; gap:11px; position:relative; overflow:hidden;
+  border-top:3px solid var(--cColor,var(--brand-500)); transition:.2s var(--ease);
+}
+.contactCard:hover{box-shadow:var(--shadow-md); transform:translateY(-2px)}
+.contactCard__top{display:flex; align-items:center; gap:12px}
+.contactCard__avatar{
+  width:44px; height:44px; border-radius:13px; display:grid; place-items:center; flex:none;
+  background:var(--cColor,var(--brand-500)); color:#fff; font-weight:900; font-size:16px;
+}
+.contactCard__id{min-width:0; flex:1}
+.contactCard__name{font-weight:800; font-size:14.5px; display:flex; align-items:center; gap:8px; flex-wrap:wrap}
+.contactCard__name .chip{font-size:10.5px; padding:2px 8px}
+.contactCard__phone{font-size:12.5px; color:var(--muted); direction:ltr; text-align:start; margin-top:1px}
+.contactCard__note{
+  font-size:12px; color:var(--text-2); background:var(--surface-2); border:1px solid var(--border);
+  border-radius:9px; padding:7px 10px; line-height:1.7;
+}
+.contactCard__acts{display:flex; align-items:center; gap:6px; margin-top:auto; padding-top:4px}
+.contactCard__acts .btn{margin-inline-end:auto}
+
+/* ============ ITEM TYPES ============ */
+.chip--meeting{background:#eef0ff; color:var(--violet-600)}
+.chip--remind{background:#fff5e0; color:var(--amber-700)}
+[data-theme="dark"] .chip--meeting{background:rgba(139,92,246,.16); color:#c4b5fd}
+[data-theme="dark"] .chip--remind{background:rgba(245,158,11,.16); color:#fcd34d}
+.optChip--task.is-on{background:var(--brand-500); border-color:var(--brand-500)}
+.optChip--meeting.is-on{background:var(--violet-500); border-color:var(--violet-500)}
+.optChip--reminder.is-on{background:var(--amber-500); border-color:var(--amber-500)}
+.field.full{grid-column:1/-1}
+
 /* ============ LEGEND / SWATCH ============ */
 .legend{display:flex; flex-wrap:wrap; gap:8px 18px; margin-top:12px; justify-content:center}
 .legendItem{display:inline-flex; align-items:center; gap:7px; font-size:12.5px; color:var(--muted); font-weight:600}
