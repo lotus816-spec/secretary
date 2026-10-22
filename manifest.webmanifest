@@ -1,0 +1,24 @@
+{
+  "name": "سكرتاري | Secretary",
+  "short_name": "سكرتاري",
+  "description": "منظّم شخصي لليوم والأسبوع والشهر: مهام ومواعيد وتذكيرات صوتية، ومتابعة الخطط المتجددة. بياناتك خاصة بك ومحفوظة على جهازك.",
+  "lang": "ar",
+  "dir": "rtl",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "theme_color": "#1D4ED8",
+  "background_color": "#F4F6FB",
+  "categories": ["productivity", "utilities", "lifestyle"],
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "icons/apple-touch-icon.png", "sizes": "180x180", "type": "image/png" }
+  ],
+  "shortcuts": [
+    { "name": "مهمة جديدة", "url": "./index.html#/tasks", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "الخطة اليوم", "url": "./index.html#/day", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] }
+  ]
+}
