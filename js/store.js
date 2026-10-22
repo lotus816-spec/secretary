@@ -56,14 +56,18 @@
   }
   function loadSession() {
     if (session) return session;
-    var s = readJSON(K_SESSION, null);          // جلسة دائمة (تذكّرني)
-    var persistent = true;
-    if (!s) { s = sessionGet(); persistent = false; }   // جلسة حتى إغلاق المتصفح
-    if (s) {
-      var age = Date.now() - (s.ts || 0);
-      if (s.remember && persistent && age > SESSION_MAX_AGE) {
-        s = null;                                // انتهت صلاحية الجلسة
-        try { localStorage.removeItem(K_SESSION); } catch (e) { }
+    /* الأولوية لجلسة «تذكّرني» الدائمة */
+    var s = readJSON(K_SESSION, null);
+    if (s && (!s.userId || (Date.now() - (s.ts || 0)) > SESSION_MAX_AGE)) {
+      /* منتهية الصلاحية أو تالفة — نتجاهلها ونجرّب جلسة التبويب */
+      try { localStorage.removeItem(K_SESSION); } catch (e) { }
+      s = null;
+    }
+    if (!s) {
+      s = sessionGet();                            /* جلسة حتى إغلاق المتصفح */
+      if (s && s.ts && (Date.now() - s.ts) > SESSION_MAX_AGE) {
+        try { sessionStorage.removeItem(K_SESSION); } catch (e) { }
+        s = null;
       }
     }
     session = s;
@@ -307,6 +311,10 @@
     if (!user) return Promise.reject(new Error('لا يوجد حساب بهذا البريد الإلكتروني.'));
     return hashPassword(String(password || ''), user.salt).then(function (hash) {
       if (hash !== user.hash) return Promise.reject(new Error('كلمة المرور غير صحيحة.'));
+      user.lastLoginAt = Date.now();
+      var all = loadUsers();
+      all[user.id] = user;
+      writeJSON(K_USERS, all);
       var s = { userId: user.id, ts: Date.now(), remember: remember !== false };
       saveSession(s);
       return user;
@@ -336,6 +344,24 @@
     if (!s || !s.userId) return null;
     var all = loadUsers();
     return all[s.userId] || null;
+  }
+
+  /* الحسابات المسجّلة على هذا الجهاز — لقائمة اختيار المستخدم عند الدخول */
+  function registeredUsers() {
+    var all = loadUsers();
+    var list = [];
+    for (var id in all) {
+      var u = all[id];
+      if (!u || !u.email) continue;
+      list.push({
+        id: id,
+        name: u.name || '',
+        email: u.email,
+        lastLoginAt: u.lastLoginAt || u.createdAt || 0
+      });
+    }
+    list.sort(function (a, b) { return b.lastLoginAt - a.lastLoginAt; });
+    return list;
   }
 
   /* ---------------- dataset ---------------- */
@@ -657,6 +683,7 @@
     emit: emit,
     register: register,
     login: login,
+    registeredUsers: registeredUsers,
     logout: logout,
     currentUser: currentUser,
     sessionInfo: sessionInfo,

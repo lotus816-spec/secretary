@@ -175,7 +175,50 @@
     emailField.value = (user && user.email) ? user.email : '';
     $('#loginPassword').value = '';
     $('#loginError').hidden = true;
+    renderAccounts();
     setTimeout(function () { $('#loginPassword').focus(); }, 140);
+  }
+
+  /* قائمة الحسابات المسجّلة على هذا الجهاز — لتبديل مستخدم آخر بسهولة */
+  function renderAccounts() {
+    var picker = $('#accPicker'), row = $('#accRow');
+    if (!picker || !row) return;
+    if (Store.supabaseMode()) { picker.hidden = true; return; }
+    var list = (Store.registeredUsers ? Store.registeredUsers() : []);
+    if (!list.length) { picker.hidden = true; return; }
+    var lastEmail = $('#loginEmail').value.trim();
+    row.innerHTML = list.slice(0, 4).map(function (u) {
+      var active = lastEmail && u.email === lastEmail;
+      return '<button type="button" class="accChip' + (active ? ' is-on' : '') + '" data-acc-email="' + UI.esc(u.email) + '" title="' + UI.esc(u.name + ' — ' + u.email) + '">' +
+        '<span class="accChip__ava">' + UI.esc(UI.initials(u.name || u.email)) + '</span>' +
+        '<span class="accChip__na">' + UI.esc(u.name || u.email) + '</span>' +
+        '</button>';
+    }).join('') +
+      '<button type="button" class="accChip accChip--new" data-acc-new="' + String(list.length >= 4 ? '' : '1') + '" title="حساب جديد">' +
+      '<svg viewBox="0 0 24 24"><use href="#i-plus"/></svg><span>حساب آخر</span></button>';
+    picker.hidden = false;
+  }
+
+  function bindAccountsPicker() {
+    var row = $('#accRow');
+    if (!row) return;
+    row.addEventListener('click', function (e) {
+      var chip = e.target.closest('.accChip');
+      if (!chip) return;
+      if (chip.hasAttribute('data-acc-new')) {
+        $('#loginEmail').value = '';
+        $('#signupEmail').value = '';
+        switchAuthTab('signup');
+        $('#signupName').focus();
+        return;
+      }
+      var mail = chip.getAttribute('data-acc-email');
+      switchAuthTab('login');
+      $('#loginEmail').value = mail || '';
+      $('#loginError').hidden = true;
+      renderAccounts();
+      $('#loginPassword').focus();
+    });
   }
 
   function switchAuthTab(which) {
@@ -188,6 +231,7 @@
     $('#signupForm').hidden = which !== 'signup';
     var ink = $('.auth__tabs').querySelector('.auth__tabInk');
     if (ink) ink.style.insetInlineStart = which === 'signup' ? 'calc(50% + 1px)' : '5px';
+    renderAccounts();
   }
 
   /* شاشة القفل: مصممة خصيصاً بدل إعادة استخدام نموذج الدخول */
@@ -2501,6 +2545,9 @@
         meter.firstElementChild.style.width = (lvl * 33.4) + '%';
       });
     }
+
+    /* قائمة الحسابات عند شاشة الدخول */
+    bindAccountsPicker();
 
     /* login */
     $('#loginForm').addEventListener('submit', function (e) {

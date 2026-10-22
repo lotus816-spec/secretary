@@ -542,6 +542,26 @@ input[type="color"]{width:46px;height:36px;border:1px solid var(--border);border
   .arcItem__acts{width:100%; justify-content:flex-end}
 }
 
+/* ============ ACCOUNTS PICKER (تسجيل الدخول لأكثر من مستخدم) ============ */
+.accPicker{display:flex; flex-direction:column; gap:8px; margin-bottom:2px}
+.accPicker__label{font-size:11.5px; font-weight:700; color:var(--muted); letter-spacing:.2px}
+.accPicker__row{display:flex; align-items:center; gap:8px; flex-wrap:wrap}
+.accChip{
+  display:inline-flex; align-items:center; gap:7px; padding:6px 12px 6px 7px; border-radius:999px;
+  background:var(--surface-2); border:1.5px solid var(--border); color:var(--text-1);
+  font:inherit; font-size:12.5px; font-weight:700; cursor:pointer; transition:.18s var(--ease);
+}
+.accChip:hover{border-color:var(--brand-400); background:color-mix(in srgb, var(--brand-500) 7%, var(--surface-2)); transform:translateY(-1px)}
+.accChip.is-on{border-color:var(--brand-500); background:color-mix(in srgb, var(--brand-500) 10%, var(--surface-2)); box-shadow:0 0 0 3px color-mix(in srgb, var(--brand-500) 15%, transparent)}
+.accChip__ava{
+  width:26px; height:26px; border-radius:50%; display:grid; place-items:center; flex:none;
+  background:linear-gradient(135deg, var(--brand-500), var(--brand-600)); color:#fff; font-size:10.5px; font-weight:900;
+}
+.accChip__na{max-width:96px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.accChip--new{border-style:dashed; padding:7px 13px; color:var(--text-2)}
+.accChip--new svg{width:14px; height:14px}
+.accChip--new:hover{color:var(--brand-600)}
+
 /* ============ USERS LIST (CONTACTS) ============ */
 .contactGrid{display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:14px}
 .contactCard{

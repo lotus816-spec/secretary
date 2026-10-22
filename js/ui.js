@@ -263,9 +263,12 @@
     return 'يتبقى ' + Math.round(n / 30) + ' شهر تقريباً';
   }
   function initials(name) {
-    var parts = String(name || '؟').trim().split(/\s+/);
-    if (parts.length > 1) return (parts[0].charAt(0) + parts[1].charAt(0)).slice(0, 2).toUpperCase();
-    return String(name || '؟').charAt(0).toUpperCase();
+    var parts = String(name || '؟').trim().split(/\s+/).map(function (w) {
+      return w.replace(/^ال(?=[^\s]{2,})/, '');      /* تجاهل «ال» التعريف في الأسماء العربية */
+    }).filter(Boolean);
+    if (!parts.length) return '؟';
+    if (parts.length > 1) return (parts[0].charAt(0) + parts[1].charAt(0)).toUpperCase();
+    return parts[0].charAt(0).toUpperCase();
   }
 
   global.UI = {
