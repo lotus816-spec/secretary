@@ -198,6 +198,11 @@
     emailField.disabled = false;
     emailField.value = (user && user.email) ? user.email : '';
     $('#loginPassword').value = '';
+    /* نظافة تامة لكل زائر جديد: امسح حقول إنشاء الحساب أيضاً */
+    $('#signupName').value = '';
+    $('#signupEmail').value = '';
+    $('#signupPassword').value = '';
+    $('#signupPassword2').value = '';
     $('#loginError').hidden = true;
     renderAccounts();
     setTimeout(function () { $('#loginPassword').focus(); }, 140);
@@ -327,6 +332,10 @@
     $('#loginEmail').value = '';
     $('#loginEmail').disabled = false;
     $('#loginPassword').value = '';
+    $('#signupName').value = '';
+    $('#signupEmail').value = '';
+    $('#signupPassword').value = '';
+    $('#signupPassword2').value = '';
     $('#lockScreen').hidden = true;
     showAuth();
     UI.toast({
