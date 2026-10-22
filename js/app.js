@@ -146,6 +146,30 @@
      boot / auth
      ========================================================== */
   function init() {
+    /* أولوية أعلى: ملف supabase/config.js المحلي إذا وضعه المستخدم (لا يُرفع أبداً) */
+    bootSupabaseConfig().then(startApp);
+  }
+
+  function bootSupabaseConfig() {
+    if (!window.SB || !window.SB.configure) return Promise.resolve();
+    if (window.SB.configured()) return Promise.resolve();
+    return fetch('supabase/config.js', { cache: 'no-store' })
+      .then(function (r) { return r.ok ? r.text() : ''; })
+      .catch(function () { return ''; })
+      .then(function (txt) {
+        if (!txt) return;
+        try {
+          var c = (new Function(txt + ';return window.SUPABASE_CONFIG||null;'))();
+          if (c && c.url && c.anonKey &&
+              String(c.url).indexOf('YOUR-PROJECT') === -1 &&
+              String(c.anonKey).indexOf('YOUR-ANON') === -1) {
+            window.SB.configure(c.url, c.anonKey);
+          }
+        } catch (e) { /* تجاهل الملف غير الصالح */ }
+      });
+  }
+
+  function startApp() {
     bindGlobal();
     registerSW();
     restoreCollapse();
@@ -234,6 +258,21 @@
     renderAccounts();
   }
 
+  /* رسائل أخطاء Supabase بالعربية */
+  function humanAuthError(ex, fallback) {
+    var m = (ex && ex.message) || '';
+    if (/failed to fetch|networkerror|load failed|timeout/i.test(m)) {
+      return 'تعذّر الوصول إلى خادم Supabase — تحقق من الإنترنت أو من Project URL.';
+    }
+    if (/invalid login credentials/i.test(m)) return 'البريد الإلكتروني أو كلمة المرور غير صحيحة.';
+    if (/email not confirmed/i.test(m)) return 'لم يتم تأكيد البريد الإلكتروني — افتح بريدك وفعّل الحساب ثم سجّل الدخول.';
+    if (/already registered|already exists/i.test(m)) return 'هذا البريد مسجّل بالفعل — سجّل الدخول بدلاً من إنشاء الحساب.';
+    if (/rate limit/i.test(m)) return 'تجاوزت حد المحاولات — انتظر دقائق ثم حاول مجدداً.';
+    if (/password.*least|weak/i.test(m)) return 'كلمة المرور قصيرة جداً.';
+    if (/signup requires|signups disabled/i.test(m)) return 'التسجيل مقفل في هذا المشروع — فعّل التسجيل من لوحة Supabase.';
+    return (ex && ex.message) || fallback || 'تعذّر إتمام العملية.';
+  }
+
   /* شاشة القفل: مصممة خصيصاً بدل إعادة استخدام نموذج الدخول */
   function showLock() {
     var user = Store.currentUser();
@@ -270,7 +309,7 @@
       resetIdle();
       UI.toast({ type: 'ok', title: 'مرحباً بعودتك', text: 'تم فتح التطبيق.' });
     }).catch(function (ex) {
-      err.textContent = ex.message || 'كلمة المرور غير صحيحة.';
+      err.textContent = humanAuthError(ex, 'كلمة المرور غير صحيحة.');
       err.hidden = false;
       $('#lockPassword').value = '';
       $('#lockPassword').focus();
@@ -382,6 +421,14 @@
     state.locked = false;
     Store.loadData();
     applySettings();
+    /* وضع Supabase: استرجاع فوري للجلسة + سحب البيانات الأخيرة من السحابة */
+    if (Store.supabaseMode() && SB.session()) {
+      SB.restoreFromSdk().then(function () {
+        Store.syncPull().then(function (ok) {
+          if (ok) { renderAll(); renderBadges(); }
+        });
+      });
+    }
     var s = settings();
     $('#userName').textContent = user.name;
     $('#userEmail').textContent = user.email;
@@ -2563,7 +2610,7 @@
         try { enterApp(user); }
         catch (ex) { UI.toast({ type: 'err', title: 'تعذّر فتح التطبيق', text: ex.message }); }
       }).catch(function (ex) {
-        var msg = (ex && ex.message) || 'تعذّر تسجيل الدخول.';
+        var msg = humanAuthError(ex, 'تعذّر تسجيل الدخول.');
         showFormError($('#loginError'), msg, { action: 'signup', actionLabel: 'إنشاء حساب جديد' });
       });
     });
@@ -2596,7 +2643,7 @@
           UI.toast({ type: 'info', title: 'تم إنشاء الحساب', text: 'تحقّق من بريدك الإلكتروني ثم سجّل الدخول.', duration: 9000 });
           switchToLogin(email);
         } else {
-          showFormError(err, (ex && ex.message) || 'تعذّر إنشاء الحساب.');
+          showFormError(err, humanAuthError(ex, 'تعذّر إنشاء الحساب.'));
         }
       });
     });

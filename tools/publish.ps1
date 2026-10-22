@@ -44,6 +44,11 @@ Get-ChildItem -LiteralPath $src -Force | Where-Object { $_.Name -ne '.git' } | F
   Copy-Item -LiteralPath $_.FullName -Destination $stage -Recurse -Force
 }
 
+# حماية: عدم رفع ملفات المفاتيح الخاصة أبداً (secure API keys)
+$secretCfg = Join-Path $stage 'supabase'
+$secretCfg = Join-Path $secretCfg 'config.js'
+if (Test-Path -LiteralPath $secretCfg) { Remove-Item -LiteralPath $secretCfg -Force; Write-Host '🔒 تم استثناء supabase/config.js من النشر (مفاتيح خاصة)' }
+
 # رفع إصدار الأصول (?v=N) لكسر كاش المتصفح بعد كل نشر
 $verFile = Join-Path $src 'version.txt'
 $curVer = 1

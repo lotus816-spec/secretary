@@ -196,16 +196,19 @@
     var uid = SB.userId();
     return SB.select('secretary_items', 'user_id=eq.' + uid + '&select=kind,id,data')
       .then(function (rows) {
-        var t = [], p = [], n = [], c = [];
+        var t = [], p = [], n = [], c = [], s = null;
         (rows || []).forEach(function (r) {
           var d = r.data || {};
           if (r.kind === 'task') t.push(d);
           else if (r.kind === 'plan') p.push(d);
           else if (r.kind === 'note') n.push(d);
           else if (r.kind === 'contact') c.push(d);
+          else if (r.kind === 'settings') s = d;
         });
         if (!data) data = defaultData(uid);
         data.tasks = t; data.plans = p; data.notes = n; data.contacts = c;
+        /* إعدادات السحابة تغلب المحلية (نفس الحساب من أي جهاز) */
+        if (s && typeof s === 'object') data.settings = Object.assign({}, data.settings, s);
         saveData();
         emit('data', data);
         return true;
